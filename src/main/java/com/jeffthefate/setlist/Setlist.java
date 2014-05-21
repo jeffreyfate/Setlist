@@ -28,6 +28,7 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -92,6 +93,7 @@ import twitter4j.TwitterStream;
 import twitter4j.TwitterStreamFactory;
 import twitter4j.User;
 import twitter4j.UserList;
+import twitter4j.UserMentionEntity;
 import twitter4j.UserStreamListener;
 import twitter4j.conf.Configuration;
 
@@ -128,6 +130,7 @@ public class Setlist implements UserStreamListener {
     private String setlistJpgFilename;
     private String fontFilename;
     private int fontSize;
+    private int verticalOffset;
     private String setlistFilename;
     private String lastSongFilename;
     private String setlistDir;
@@ -145,15 +148,19 @@ public class Setlist implements UserStreamListener {
     private TwitterStream twitterStream;
     private boolean kill = false;
     
-    private Map<String, Integer> usersMap = new HashMap<String, Integer>();
+    private HashMap<String, Integer> usersMap = new HashMap<String, Integer>();
+    private GameComparator gameComparator = new GameComparator(usersMap);
+    private TreeMap<String, Integer> sortedUsersMap =
+    		new TreeMap<String, Integer>(gameComparator);
     
     // java -jar /home/Setlist-One.jar 14400000 >> ...
     
     public Setlist(String url, long duration, boolean isDev,
     		Configuration setlistConfig, Configuration gameConfig,
     		String setlistJpgFilename, String fontFilename, int fontSize,
-    		String setlistFilename, String lastSongFilename, String setlistDir,
-    		ArrayList<ArrayList<String>> nameList, String currAccount) {
+    		int verticalOffset, String setlistFilename, String lastSongFilename,
+    		String setlistDir, ArrayList<ArrayList<String>> nameList,
+    		String currAccount) {
     	this.url = url;
     	this.duration = duration;
     	this.isDev = isDev;
@@ -162,6 +169,7 @@ public class Setlist implements UserStreamListener {
     	this.setlistJpgFilename = setlistJpgFilename;
     	this.fontFilename = fontFilename;
     	this.fontSize = fontSize;
+    	this.verticalOffset = verticalOffset;
     	this.setlistFilename = setlistFilename;
     	this.lastSongFilename = lastSongFilename;
     	this.setlistDir = setlistDir;
@@ -180,14 +188,39 @@ public class Setlist implements UserStreamListener {
     	} while (endTime >= System.currentTimeMillis() && !kill);
     	System.out.println("duration: " + duration);
     	if (duration > 0) {
+    		String setlistMessage = "";
     		StringBuilder sb = new StringBuilder();
     		sb.append("[Final #DMB ");
     		sb.append(tweetDateString);
     		sb.append(" Setlist]");
+    		setlistMessage = sb.toString();
     		System.out.println(sb.toString());
     		screenshot = new SetlistScreenshot(setlistJpgFilename, fontFilename,
-    				setlistText, fontSize);
-    		postTweet(sb.toString(), "",
+    				setlistText, fontSize, verticalOffset);
+    		String gameMessage = "";
+    		if (!usersMap.isEmpty()) {
+    			sortedUsersMap.putAll(usersMap);
+    			sb = new StringBuilder();
+    			sb.append("[Final Results]");
+    			String winner = "";
+    			int count = 0;
+    			for (Entry<String, Integer> user : sortedUsersMap.entrySet()) {
+    				winner = user.getKey();
+    				if ((sb.length() + winner.length() + 10 +
+    	    				user.getValue().toString().length()) >
+    	    					140)
+    	    			break;
+    	    		count++;
+    	    		sb.append("\n#");
+    	    		sb.append(count);
+    	    		sb.append(" - @");
+    	    		sb.append(winner);
+    	    		sb.append(" (");
+    	    		sb.append(user.getValue().toString());
+    	    		sb.append(")");
+    			}
+    		}
+    		postTweet(setlistMessage, gameMessage,
     				new File(screenshot.getOutputFilename()), -1, false);
     	}
     	twitterStream.cleanUp();
@@ -295,7 +328,7 @@ public class Setlist implements UserStreamListener {
 	                }
 	                screenshot = new SetlistScreenshot(
 		    				setlistJpgFilename, fontFilename, setlistText,
-		    				fontSize);
+		    				fontSize, verticalOffset);
 	                postTweet(sb.toString(), gameMessage,
 	                		new File(screenshot.getOutputFilename()), -1, true);
             	}
@@ -3470,7 +3503,17 @@ public class Setlist implements UserStreamListener {
 		if (!failed && postGame && !setlistMessage.toLowerCase(
 				Locale.getDefault()).contains("[Encore:]".toLowerCase(
 						Locale.getDefault()))) {
-			statusUpdate = new StatusUpdate(setlistMessage.concat(gameMessage));
+			if (!setlistMessage.toLowerCase(Locale.getDefault()).contains(
+						"[Final".toLowerCase(Locale.getDefault()))) {
+				statusUpdate = new StatusUpdate(
+						setlistMessage.concat(gameMessage));
+			}
+			else if (!gameMessage.isEmpty()) {
+				statusUpdate = new StatusUpdate(gameMessage);
+			}
+			else {
+				return null;
+			}
 			status = null;
 			statusUpdate.setInReplyToStatusId(replyTo);
 			tries = 0;
@@ -3871,6 +3914,9 @@ public class Setlist implements UserStreamListener {
 		String inReplyTo = status.getInReplyToScreenName();
 		System.out.println("user: " + userName);
 		System.out.println("inReplyTo: " + inReplyTo);
+		for (UserMentionEntity mention : status.getUserMentionEntities()) {
+			System.out.println("mention: " + mention.getScreenName());
+		}
 
 		if (inReplyTo.equalsIgnoreCase(currAccount)) {
 			String massaged = massageResponse(status.getText());
@@ -4002,12 +4048,28 @@ public class Setlist implements UserStreamListener {
 		return text.toLowerCase(Locale.getDefault()).replaceFirst(
 						"(?<=^|(?<=[^a-zA-Z0-9-_\\.]))@([A-Za-z]+[A-Za-z0-9]+)",
 						"").
-				replaceAll("[.,'`\":;/?\\-!@#]", "").trim();
+				replaceAll("[.,'`\":;/?\\-!@#Ä~+*]", "").trim();
 	}
 	
 	private String massageAnswer(String text) {
 		return text.toLowerCase(Locale.getDefault()).
-				replaceAll("[.,'`\":;/?\\-!@#]", "").trim();
+				replaceAll("[.,'`\":;/?\\-!@#Ä~+*]", "").trim();
+	}
+	
+	public static class GameComparator implements Comparator<String> {
+
+	    Map<String, Integer> base;
+	    public GameComparator(Map<String, Integer> base) {
+	        this.base = base;
+	    }
+   
+	    public int compare(String a, String b) {
+	        if (base.get(a) <= base.get(b)) {
+	            return 1;
+	        } else {
+	            return -1;
+	        } // returning 0 would merge keys
+	    }
 	}
     
 }
