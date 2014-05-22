@@ -148,6 +148,12 @@ public class Setlist implements UserStreamListener {
     private TwitterStream twitterStream;
     private boolean kill = false;
     
+    private static ArrayList<String> locList = new ArrayList<String>();
+    private static ArrayList<String> setList = new ArrayList<String>();
+    private static ArrayList<String> noteList = new ArrayList<String>();
+    private static TreeMap<Integer, String> noteMap =
+    		new TreeMap<Integer, String>();
+    
     private HashMap<String, Integer> usersMap = new HashMap<String, Integer>();
     private GameComparator gameComparator = new GameComparator(usersMap);
     private TreeMap<String, Integer> sortedUsersMap =
@@ -198,33 +204,27 @@ public class Setlist implements UserStreamListener {
     		screenshot = new SetlistScreenshot(setlistJpgFilename, fontFilename,
     				setlistText, fontSize, verticalOffset);
     		String gameMessage = "";
-    		if (!usersMap.isEmpty()) {
-    			sortedUsersMap.putAll(usersMap);
-    			sb = new StringBuilder();
-    			sb.append("[Final Results]");
-    			String winner = "";
-    			int count = 0;
-    			for (Entry<String, Integer> user : sortedUsersMap.entrySet()) {
-    				winner = user.getKey();
-    				if ((sb.length() + winner.length() + 10 +
-    	    				user.getValue().toString().length()) >
-    	    					140)
-    	    			break;
-    	    		count++;
-    	    		sb.append("\n#");
-    	    		sb.append(count);
-    	    		sb.append(" - @");
-    	    		sb.append(winner);
-    	    		sb.append(" (");
-    	    		sb.append(user.getValue().toString());
-    	    		sb.append(")");
-    			}
-    		}
     		postTweet(setlistMessage, gameMessage,
     				new File(screenshot.getOutputFilename()), -1, false);
     	}
     	twitterStream.cleanUp();
     	twitterStream.shutdown();
+    }
+    
+    public List<String> getLocList() {
+    	return locList;
+    }
+    
+    public List<String> getSetList() {
+    	return setList;
+    }
+    
+    public List<String> getNoteList() {
+    	return noteList;
+    }
+    
+    public Map<Integer, String> getNoteMap() {
+    	return noteMap;
     }
     
     private void runSetlistCheck(String url) {
@@ -251,20 +251,21 @@ public class Setlist implements UserStreamListener {
         	sb.append("\n");
         }
         sb.append("\n");
-        boolean hasEncore = false;
         for (String set : setList) {
         	if (set.toLowerCase().equals("encore:")) {
-        		if (!hasEncore) {
-        			sb.append("\n");
-        			sb.append(set);
-        			sb.append("\n");
-        		}
-        		hasEncore = true;
+    			sb.append("\n");
+    			sb.append(set);
+    			sb.append("\n");
+        	}
+        	else if (set.toLowerCase().equals("set break")) {
+    			sb.append("\n");
+    			sb.append(set);
+    			sb.append("\n");
+    			sb.append("\n");
         	}
         	else {
         		sb.append(set);
         		sb.append("\n");
-        		hasEncore = false;
         	}
         }
         if (!noteMap.isEmpty()) {
@@ -313,9 +314,10 @@ public class Setlist implements UserStreamListener {
             		System.out.println("POST NOTIFICATION AND TWEET: " +
             				lastSong);
             		String gameMessage = "";
-            		if (!isDev)
+            		if (!isDev) {
             			postNotification(getPushJsonString(lastSong,
             					setlistText, getExpireDateString()));
+            		}
 	                if (lastSong.toLowerCase().startsWith("show begins")) {
 	                	sb.append("DMB ");
 	                	sb.append(lastSong);
@@ -334,17 +336,20 @@ public class Setlist implements UserStreamListener {
             	}
             	else {
             		System.out.println("POST NOTIFICATION: BLANK");
-            		if (!isDev)
+            		if (!isDev) {
             			postNotification(getPushJsonString("", setlistText,
             					getExpireDateString()));
+            		}
             	}
                 writeStringToFile(lastSong, lastSongFile);
             }
             else if (readStringFromFile(lastSongFile).equals(lastSong)) {
             	System.out.println("POST NOTIFICATION: BLANK");
-            	if (!isDev)
+            	if (!isDev) {
             		postNotification(getPushJsonString("", setlistText,
             				getExpireDateString()));
+            		postTweet(StringUtils.strip(diff), "", null, -1, false);
+            	}
             }
             System.out.println(html);
         }
@@ -1355,12 +1360,6 @@ public class Setlist implements UserStreamListener {
         return locString.append("\n").append(setString).toString();
     }
     
-    private static ArrayList<String> locList = new ArrayList<String>();
-    private static ArrayList<String> setList = new ArrayList<String>();
-    private static ArrayList<String> noteList = new ArrayList<String>();
-    private static TreeMap<Integer, String> noteMap =
-    		new TreeMap<Integer, String>();
-    
     private Document getPageDocument(String url) {
     	if (url.startsWith("http")) {
 	        HttpPost postMethod = new HttpPost(
@@ -1433,7 +1432,7 @@ public class Setlist implements UserStreamListener {
     				readStringFromFile(url)));
     }
     
-    private String liveSetlist(String url) {
+    public String liveSetlist(String url) {
     	Document doc = getPageDocument(url);
         //Document doc = Jsoup.parse(StringEscapeUtils.unescapeHtml4(readStringFromFile("C:\\Users\\Jeff\\Desktop\\testLive.txt")));
         //Document doc = Jsoup.parse(StringEscapeUtils.unescapeHtml4(readStringFromFile("C:\\Users\\Jeff\\Desktop\\testOne.txt")));
@@ -1473,6 +1472,7 @@ public class Setlist implements UserStreamListener {
         String currSong = "";
         int breaks = 0;
         String fontText = "";
+        boolean hasSong = false;
         if (doc != null) {
         	// Find nodes in the parent setlist node, for both types
             for (Node node : doc.body().getElementsByAttributeValue("style",
@@ -1528,8 +1528,13 @@ public class Setlist implements UserStreamListener {
                             			songMap.put(currentLoc, currSong);
                     				}
                     				else if (divText.toLowerCase().contains(
-                    						"encore"))
+                    						"encore")) {
                     					songMap.put(currentLoc, "Encore:");
+                    				}
+                    				else if (divText.toLowerCase().contains(
+                    						"set break")) {
+                    					songMap.put(currentLoc, "Set Break");
+                    				}
                     			}
                     			else {
                     				boolean segue = false;
@@ -1723,6 +1728,7 @@ public class Setlist implements UserStreamListener {
     				String[] songs = divText.split("\\d+[\\.]{1}");
     				// If a song is found
     				if (songs.length > 1) {
+    					hasSong = true;
     					// Add the song
     					currSong = StringUtils.replaceChars(
                         		songs[1], badChar, apos);
@@ -1743,9 +1749,16 @@ public class Setlist implements UserStreamListener {
     	    					lastSong = currSong;
     	    					breaks = 0;
     						}
+    						else if (divText.toLowerCase().contains(
+    								"set break")) {
+    							currSong = "Set Break";
+    							setList.add(currSong);
+    							System.out.println(currSong);
+    							lastSong = currSong;
+    							breaks = 0;
+    						}
     						// We're in the show notes
-    						else if (!divText.toLowerCase()
-    								.contains("encore")) {
+    						else {
 	    						String nodeText = StringUtils.remove(divText,
 	    								endChar);
 	    						// Create the notes
@@ -1799,10 +1812,27 @@ public class Setlist implements UserStreamListener {
     				System.out.println("secondBreak: " + secondBreak);
             		// Found a segue image
             		if (node.nodeName().equals("img")) {
+            			if (hasSong) {
+            				System.out.println("Adding ->");
+            				currSong = setList.get(setList.size()-1).concat(
+            						" ->");
+            				setList.set(setList.size()-1, currSong);
+            				lastSong = currSong;
+            			}
+            			else {
+            				if (noteList.isEmpty()) {
+            					noteList.add("Notes:");
+            					System.out.println("Notes:");
+            				}
+            				noteList.add("-> ");
+            				System.out.println("-> ");
+            				hasSegue = true;
+            			}
             			// If either still in main set
             			// OR
             			// In encore with second break
             			// This indicates the img is in the show notes
+            			/*
             			if ((firstBreak && !hasEncore) || secondBreak) {
             				if (noteList.isEmpty()) {
             					noteList.add("Notes:");
@@ -1820,6 +1850,7 @@ public class Setlist implements UserStreamListener {
 		            		setList.set(setList.size()-1, currSong);
 		            		lastSong = currSong;
             			}
+            			*/
             			breaks = 0;
             		}
             		// Found a guest symbol
@@ -1841,6 +1872,7 @@ public class Setlist implements UserStreamListener {
             		else {
             			// br tags indicate where we are in the notes
             			if (node.nodeName().equals("br")) {
+            				hasSong = false;
             				// Increment the break tag count
             				breaks++;
         					// This is the third double br because we have
@@ -3959,6 +3991,34 @@ public class Setlist implements UserStreamListener {
 	public void onUserListUpdate(User arg0, UserList arg1) {}
 	public void onUserProfileUpdate(User arg0) {}
 	
+	private void postSetlistScores() {
+		System.out.println("usersMap size: " + usersMap.size());
+		System.out.println(usersMap);
+		if (!usersMap.isEmpty()) {
+			sortedUsersMap.putAll(usersMap);
+			StringBuilder sb = new StringBuilder();
+			sb.append("[Final Results]");
+			String winner = "";
+			int count = 0;
+			for (Entry<String, Integer> user : sortedUsersMap.entrySet()) {
+				winner = user.getKey();
+				if ((sb.length() + winner.length() + 10 +
+	    				user.getValue().toString().length()) >
+	    					140)
+	    			break;
+	    		count++;
+	    		sb.append("\n#");
+	    		sb.append(count);
+	    		sb.append(" - @");
+	    		sb.append(winner);
+	    		sb.append(" (");
+	    		sb.append(user.getValue().toString());
+	    		sb.append(")");
+			}
+			// TODO postTweet
+		}
+	}
+	
 	private boolean checkAnswer(String answer, String response) {
 		if (answer == null || response == null)
 			return false;
@@ -4051,9 +4111,10 @@ public class Setlist implements UserStreamListener {
 				replaceAll("[.,'`\":;/?\\-!@#Ä~+*]", "").trim();
 	}
 	
-	private String massageAnswer(String text) {
-		return text.toLowerCase(Locale.getDefault()).
-				replaceAll("[.,'`\":;/?\\-!@#Ä~+*]", "").trim();
+	public String massageAnswer(String text) {
+		String answer = text.replaceAll("[.,'`\":;/?\\-!@#Ä~+*]", "").
+				toLowerCase(Locale.getDefault()).trim();
+		return answer.replaceAll("(5\\|\\|)+", "");
 	}
 	
 	public static class GameComparator implements Comparator<String> {
