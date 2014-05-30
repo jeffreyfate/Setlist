@@ -163,6 +163,8 @@ public class Setlist implements UserStreamListener {
     private String noteSong = "";
     
     private ArrayList<String> symbolList = new ArrayList<String>(0);
+    private HashMap<String, String> replacementMap =
+    		new HashMap<String, String>(0);
     
     // java -jar /home/Setlist-One.jar 14400000 >> ...
     
@@ -244,7 +246,7 @@ public class Setlist implements UserStreamListener {
     	return false;
     }
     
-    private void runSetlistCheck(String url) {
+    public void runSetlistCheck(String url) {
     	cal = Calendar.getInstance(TimeZone.getDefault());
         cal.setTimeInMillis(System.currentTimeMillis());
         System.out.println(cal.getTime().toString());
@@ -254,10 +256,12 @@ public class Setlist implements UserStreamListener {
                 getExpireDateString()));
         */
         String html = null;
-        if (url != null)
+        if (url != null) {
         	html = liveSetlist(url);
-        else	
+        }
+        else {
         	html = liveSetlist("https://whsec1.davematthewsband.com/backstage.asp");
+        }
         currDateString = getNewSetlistDateString(locList.get(0));
         StringBuilder sb = new StringBuilder();
         if (locList.size() < 4)
@@ -275,8 +279,6 @@ public class Setlist implements UserStreamListener {
         System.out.println("Old symbols:");
         System.out.println(setList);
 		String noteChar = "";
-		HashMap<String, String> replacementMap = new HashMap<String, String>(0);
-		Random random = new Random();
 		ArrayList<String> newSymbols = new ArrayList<String>(setList);
 		for (int i = 0; i < newSymbols.size(); i++) {
 			if (newSymbols.get(i).contains("5||")) {
@@ -284,13 +286,14 @@ public class Setlist implements UserStreamListener {
 			}
 			else {
 				noteChar = StringUtils.strip(newSymbols.get(i).replaceAll(
-						"[A-Za-z0-9,'()&:.]+", ""));
+						"[A-Za-z0-9,'’()&:.\\->]+", ""));
 			}
 			if (!StringUtils.isBlank(noteChar)) {
 				// There is a note for this song
 				if (!replacementMap.containsKey(noteChar)) {
-					replacementMap.put(noteChar, symbolList.remove(
-							random.nextInt(symbolList.size())));
+					replacementMap.put(noteChar,
+							symbolList.get(replacementMap.size()));
+					System.out.println(replacementMap);
 				}
 				newSymbols.set(i, newSymbols.get(i).replace(noteChar,
 						replacementMap.get(noteChar)));
@@ -1513,9 +1516,10 @@ public class Setlist implements UserStreamListener {
 	        }
 	        return Jsoup.parse(html);
     	}
-    	else
+    	else {
     		return Jsoup.parse(StringEscapeUtils.unescapeHtml4(
-    				readStringFromFile(url)));
+    				readStringFromFile(url)));	
+    	}
     }
     
     public String liveSetlist(String url) {

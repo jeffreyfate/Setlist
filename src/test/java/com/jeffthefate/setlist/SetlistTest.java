@@ -1,5 +1,6 @@
 package com.jeffthefate.setlist;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -47,10 +48,20 @@ public class SetlistTest extends TestCase {
 		setlist.postTweet("[Final:] Test message 12", "TEST GAME MESSAGE 12", null, -1, true);
 		setlist.postTweet("Test message 13", "TEST GAME MESSAGE 13", null, -1, true);
 	}
-	
 	public void testFullSetlist() {
-		Setlist setlist = new Setlist("", 0, true, null, null, "", "", 0, 0, "", "", "", null, "");
-		setlist.liveSetlist("C:\\Users\\Jeff\\Desktop\\testSeventeen.txt");
+		ArrayList<String> symbolList = new ArrayList<String>(0);
+		symbolList.add("*");
+		symbolList.add("+");
+    	symbolList.add("~");
+    	symbolList.add("^");
+    	symbolList.add("§");
+    	symbolList.add("¤");
+    	symbolList.add("$");
+    	symbolList.add("%");
+		Setlist setlist = new Setlist("", 0, true, setupDevConfig(),
+				setupDevConfig(), "D:\\setlist.jpg", "D:\\roboto.ttf", 21, 70,
+				"", "", "", null, symbolList, "");
+		setlist.runSetlistCheck("C:\\Users\\Jeff\\Desktop\\testEighteen.txt");
 		List<String> locList = setlist.getLocList();
 		List<String> setList = setlist.getSetList();
 		List<String> noteList = setlist.getNoteList();
@@ -95,15 +106,17 @@ public class SetlistTest extends TestCase {
         System.out.println(sb.toString());
         System.out.println(setList);
 	}
-	
+	*/
 	public void testMassageAnswer() {
-		Setlist setlist = new Setlist("", 0, true, null, null, "", "", 0, 0, "", "", "", null, "");
+		Setlist setlist = new Setlist("", 0, true, setupDevConfig(),
+				setupDevConfig(), "D:\\setlist.jpg", "D:\\roboto.ttf", 21, 70,
+				"", "", "", null, null, "");
 		System.out.println(setlist.massageAnswer("Sister5||"));
 		System.out.println(setlist.massageAnswer("SisterÄ"));
 		System.out.println(setlist.massageAnswer("Sister@"));
 		System.out.println(setlist.massageAnswer("Sister~"));
 	}
-	
+	/*
 	public void testFindWinners() {
 		Setlist setlist = new Setlist("", 0, true, setupDevConfig(),
 				setupDevConfig(), "", "", 0, 0, "", "", "", null, "");
@@ -111,20 +124,18 @@ public class SetlistTest extends TestCase {
 		setlist.findWinners("Stolen Away On 55th & 3rd",
 				"Current #DMB Song & Setlist: [Stolen Away On 55th & 3rd]");
 	}
-	*/
+
 	public void testPostSetlistScores() {
 		Setlist setlist = new Setlist("", 0, true, setupDevConfig(),
 				setupDevConfig(), "D:\\setlist.jpg", "D:\\roboto.ttf", 21, 70,
 				"", "", "", null, null, "");
 		HashMap<String, Integer> winnerMap = new HashMap<String, Integer>(0);
-		/*
 		winnerMap.put("Copperpot5", 1);
 		winnerMap.put("jeffthefate", 1);
 		winnerMap.put("testersonman", 2);
 		winnerMap.put("testy", 4);
 		winnerMap.put("boydtinsley46", 7);
 		setlist.postSetlistScoresText("[Current Scores]", winnerMap);
-		*/
 		winnerMap.put("Copperpot5", 3);
 		winnerMap.put("jeffthefate", 4);
 		winnerMap.put("testersonman", 5);
@@ -134,4 +145,5 @@ public class SetlistTest extends TestCase {
 		setlist.postSetlistScoresImage("[Final Scores]", "Top Scores",
 				winnerMap);
 	}
+	*/
 }
