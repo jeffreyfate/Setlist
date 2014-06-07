@@ -17,6 +17,9 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.FilenameFilter;
 import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.nio.ByteBuffer;
@@ -138,6 +141,7 @@ public class Setlist implements UserStreamListener {
     private String setlistFilename;
     private String lastSongFilename;
     private String setlistDir;
+    private String banFile;
     
     private Configuration setlistConfig;
     private Configuration gameConfig;
@@ -166,13 +170,16 @@ public class Setlist implements UserStreamListener {
     private HashMap<String, String> replacementMap =
     		new HashMap<String, String>(0);
     
+    private String finalTweetText = null;
+    
     // java -jar /home/Setlist-One.jar 14400000 >> ...
     
     public Setlist(String url, long duration, boolean isDev,
     		Configuration setlistConfig, Configuration gameConfig,
     		String setlistJpgFilename, String fontFilename, int fontSize,
     		int verticalOffset, String setlistFilename, String lastSongFilename,
-    		String setlistDir, ArrayList<ArrayList<String>> nameList,
+    		String setlistDir, String banFile,
+    		ArrayList<ArrayList<String>> nameList,
     		ArrayList<String> symbolList, String currAccount) {
     	this.url = url;
     	this.duration = duration;
@@ -186,6 +193,7 @@ public class Setlist implements UserStreamListener {
     	this.setlistFilename = setlistFilename;
     	this.lastSongFilename = lastSongFilename;
     	this.setlistDir = setlistDir;
+    	this.banFile = banFile;
     	this.nameList = nameList;
     	this.symbolList = symbolList;
     	this.currAccount = currAccount;
@@ -202,18 +210,12 @@ public class Setlist implements UserStreamListener {
     	} while (endTime >= System.currentTimeMillis() && !kill);
     	System.out.println("duration: " + duration);
     	if (duration > 0) {
-    		String setlistMessage = "";
-    		StringBuilder sb = new StringBuilder();
-    		sb.append("[Final] Dave Matthews Band Setlist for ");
-    		sb.append(getTweetDateString(locList.get(0)));
-    		sb.append(" - ");
-    		sb.append(locList.get(locList.size()-2));
-    		setlistMessage = sb.toString();
-    		System.out.println(sb.toString());
     		screenshot = new SetlistScreenshot(setlistJpgFilename, fontFilename,
     				setlistText, fontSize, verticalOffset);
-    		updateStatus(setlistConfig, setlistMessage,
+    		updateStatus(setlistConfig, finalTweetText,
     				new File(screenshot.getOutputFilename()), -1);
+    		postSetlistScoresImage(FINAL_SCORES, "Top Scores",
+					usersMap);
     	}
     	twitterStream.cleanUp();
     	twitterStream.shutdown();
@@ -264,14 +266,21 @@ public class Setlist implements UserStreamListener {
         }
         currDateString = getNewSetlistDateString(locList.get(0));
         StringBuilder sb = new StringBuilder();
-        if (locList.size() < 4)
+        if (locList.size() < 4) {
         	locList.add(1, "Dave Matthews Band");
+        }
+		sb.append("[Final] Dave Matthews Band Setlist for ");
+		sb.append(getTweetDateString(locList.get(0)));
+		sb.append(" - ");
+		sb.append(locList.get(locList.size()-2));
+		finalTweetText = sb.toString();
+		System.out.println(sb.toString());
+		sb = new StringBuilder();
         for (String loc : locList) {
         	sb.append(loc);
         	sb.append("\n");
         }
-        sb.append("\n");
-        if (setList.get(setList.size()-1).equals(
+        if (setList.size() >= 2 && setList.get(setList.size()-1).equals(
         		setList.get(setList.size()-2))) {
         	System.out.println("Removed " + setList.remove(setList.size()-1));
         }
@@ -286,7 +295,7 @@ public class Setlist implements UserStreamListener {
 			}
 			else {
 				noteChar = StringUtils.strip(newSymbols.get(i).replaceAll(
-						"[A-Za-z0-9,'’()&:.\\->]+", ""));
+						"[A-Za-z0-9,'’()&:.\\->@]+", ""));
 			}
 			if (!StringUtils.isBlank(noteChar)) {
 				// There is a note for this song
@@ -302,33 +311,44 @@ public class Setlist implements UserStreamListener {
 		System.out.println("New symbols:");
         System.out.println(newSymbols);
 		// TODO Replace in notes
+        // We need a spacer new line in these scenarios:
+        //     Between location block and set list
+        //     Between first set and set break
+        //     Between set break and second set
+        //     Between second set and encore
+        //     Between last song and notes, if any
+        boolean setBreakLast = false;
         for (String set : setList) {
+        	if (setBreakLast) {
+        		sb.append("\n");
+        		setBreakLast = false;
+        	}
+        	sb.append("\n");
         	if (set.toLowerCase().equals("encore:")) {
     			sb.append("\n");
     			sb.append(set);
-    			sb.append("\n");
         	}
         	else if (set.toLowerCase().equals("set break")) {
     			sb.append("\n");
     			sb.append(set);
-    			sb.append("\n");
-    			sb.append("\n");
+    			setBreakLast = true;
         	}
         	else {
         		sb.append(set);
-        		sb.append("\n");
         	}
         }
         if (sb.substring(sb.length()-4, sb.length()).equals("\n\n")) {
         	sb.delete(sb.length()-2, sb.length());
         }
         if (!noteMap.isEmpty()) {
+        	sb.append("\n");
         	for (Entry<Integer, String> note : noteMap.entrySet()) {
         		sb.append("\n");
             	sb.append(note.getValue());
         	}
         }
         else if (!noteList.isEmpty()) {
+    		sb.append("\n");
         	for (String note : noteList) {
         		sb.append("\n");
             	sb.append(note);
@@ -2270,6 +2290,21 @@ public class Setlist implements UserStreamListener {
         return dateString;
     }
     
+    private String getShortSetlistString(String dateLine) {
+    	SimpleDateFormat dateFormat = new SimpleDateFormat("MMM dd yyyy");
+        Date date = null;
+        String dateString = null;
+        try {
+            date = dateFormat.parse(dateLine);
+            dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+            dateString = dateFormat.format(date.getTime());
+        } catch (ParseException e2) {
+            System.out.println("Failed to parse date from " + dateLine);
+            e2.printStackTrace();
+        }
+        return dateString;
+    }
+    
     private String getTweetDateString(String dateLine) {
         SimpleDateFormat dateFormat = new SimpleDateFormat("MMM dd yyyy");
         Date date = null;
@@ -2938,6 +2973,7 @@ public class Setlist implements UserStreamListener {
         dataNode.put("action", "com.jeffthefate.dmb.ACTION_NEW_SONG");
         dataNode.put("song", latestSong);
         dataNode.put("setlist", setlist);
+        dataNode.put("shortDate", getShortSetlistString(locList.get(0)));
         dataNode.put("timestamp", Long.toString(System.currentTimeMillis()));
         rootNode.put("where", whereNode);
         rootNode.put("expiration_time", expireDateString);
@@ -3952,7 +3988,13 @@ public class Setlist implements UserStreamListener {
 		boolean responseMatches = false;
 		boolean isCorrect = false;
 		
+		ArrayList<String> banList = getBanList();
+		
     	for (Entry<String, String> answer : answers.entrySet()) {
+    		if (banList.contains(answer.getKey().toLowerCase(
+    				Locale.getDefault()))) {
+    			continue;
+    		}
     		System.out.println("Checking " + answer.getValue());
     		isCorrect = false;
     		if (checkAnswer(lastSong, answer.getValue())) {
@@ -3995,15 +4037,22 @@ public class Setlist implements UserStreamListener {
     	
     	StringBuilder sb = new StringBuilder();
         if (!winners.isEmpty() && (songMessage.length() +
-        		CORRECT_ANSWERS_TEXT.length()-1 + winners.get(0).length() + 7)
+        		CORRECT_ANSWERS_TEXT.length()-1 + winners.get(0).length() + 10 +
+        		usersMap.get(winners.get(0)).toString().length())
         			<= 140) {
 	        sb.append(CORRECT_ANSWERS_TEXT);
 	        int count = 0;
 	    	for (String winner : winners) {
+	    		if (banList.contains(winner.toLowerCase(
+	    				Locale.getDefault()))) {
+	    			continue;
+	    		}
 	    		count++;
-	    		if ((sb.length() + 2 + Integer.toString(count).length() + 4 +
-	    				winner.length() + 2 + 
-	    				usersMap.get(winner).toString().length() + 1) >= 140) {
+	    		System.out.println("Setlist game tweet length: " + sb.length());
+	    		if ((songMessage.length() + sb.length()-1 + 3 +
+	    				Integer.toString(count).length() + 4 + winner.length() +
+	    				2 + usersMap.get(winner).toString().length() + 1) >
+	    					140) {
 	    			break;
 	    		}
 	    		sb.append("\n#");
@@ -4020,7 +4069,7 @@ public class Setlist implements UserStreamListener {
         }
     	answers.clear();
     	answers = new LinkedHashMap<String, String>();
-    	return sb.toString();
+    	return (String) sb.toString().subSequence(0, 140);
     }
     
     private void watchTwitterStream() {
@@ -4036,6 +4085,10 @@ public class Setlist implements UserStreamListener {
 	    filterQuery.track(new String[]{"#hashtag"});
 	    twitterStream.filter(filterQuery);
 	    */
+    }
+    
+    public void addAnswer(String userName, String message) {
+    	answers.put(userName, massageResponse(message));
     }
     
     private void processTweet(Status status) {
@@ -4057,9 +4110,44 @@ public class Setlist implements UserStreamListener {
 		}
 	}
     
+    private void sendDirectMessage(Configuration tweetConfig,
+			String screenName, String message) {
+		Twitter twitter = new TwitterFactory(tweetConfig).getInstance();
+		try {
+			twitter.sendDirectMessage(screenName, message);
+		} catch (TwitterException e) {
+			System.out.println("Unable to send direct message!");
+			e.printStackTrace();
+		}
+	}
+    
     public void onStatus(Status status) {
 		processTweet(status);
 	}
+    
+    public void banUser(String user) {
+    	ArrayList<String> banList = getBanList();
+    	if (!banList.contains(user)) {
+    		banList.add(user);
+    	}
+    	if (!saveBanList(banList)) {
+			sendDirectMessage(gameConfig, "Copperpot5",
+					"Failed banning user!");
+		}
+    }
+    
+    public void unbanUser(String user) {
+    	ArrayList<String> banList = getBanList();
+		for (int i = 0; i < banList.size(); i++) {
+			if (user.equalsIgnoreCase(banList.get(i))) {
+				banList.remove(i);
+			}
+		}
+		if (!saveBanList(banList)) {
+			sendDirectMessage(gameConfig, "Copperpot5",
+					"Failed banning user!");
+		}
+    }
 
 	public void onDeletionNotice(StatusDeletionNotice arg0) {}
 	public void onScrubGeo(long arg0, long arg1) {}
@@ -4075,6 +4163,12 @@ public class Setlist implements UserStreamListener {
 			String massagedText = dm.getText().toLowerCase(Locale.getDefault()); 
 			if (massagedText.contains("end setlist")) {
 				kill = true;
+			}
+			else if (massagedText.contains("unban")) {
+				unbanUser(StringUtils.strip(massagedText.replace("unban", "")));
+			}
+			else if (massagedText.contains("ban")) {
+				banUser(StringUtils.strip(massagedText.replace("ban", "")));
 			}
 			else if (massagedText.contains("final scores")) {
 				if (massagedText.contains("image")) {
@@ -4119,6 +4213,12 @@ public class Setlist implements UserStreamListener {
 		    TreeMap<String, Integer> sortedUsersMap =
 		    		new TreeMap<String, Integer>(gameComparator);
 			sortedUsersMap.putAll(winnerMap);
+			ArrayList<String> banList = getBanList();
+			for (String user : winnerMap.keySet()) {
+				if (banList.contains(user.toLowerCase(Locale.getDefault()))) {
+					sortedUsersMap.remove(user);
+				}
+			}
 			Screenshot gameScreenshot = new TriviaScreenshot(setlistJpgFilename,
 					fontFilename, imageMessage, sortedUsersMap, 30, 20,
 					10, verticalOffset);
@@ -4136,6 +4236,12 @@ public class Setlist implements UserStreamListener {
 		    TreeMap<String, Integer> sortedUsersMap =
 		    		new TreeMap<String, Integer>(gameComparator);
 			sortedUsersMap.putAll(winnerMap);
+			ArrayList<String> banList = getBanList();
+			for (String user : winnerMap.keySet()) {
+				if (banList.contains(user.toLowerCase(Locale.getDefault()))) {
+					sortedUsersMap.remove(user);
+				}
+			}
 			StringBuilder sb = new StringBuilder();
 			sb.append(message);
 			String winner = "";
@@ -4237,5 +4343,38 @@ public class Setlist implements UserStreamListener {
 	    }
 	}
     
+	public ArrayList<String> getBanList() {
+		ArrayList<String> banList = new ArrayList<String>(0);
+		try {
+			FileInputStream fileInputStream = new FileInputStream(banFile);
+		    ObjectInputStream objectInputStream = new ObjectInputStream(
+		    		fileInputStream);
+		    banList = (ArrayList<String>) objectInputStream.readObject();
+		    objectInputStream.close();
+		    fileInputStream.close();
+		} catch (FileNotFoundException e) {
+			return new ArrayList<String>(0);
+		} catch (Exception e) {
+		    e.printStackTrace();
+		    return null;
+	    }
+		return banList;
+	}
+	
+	private boolean saveBanList(ArrayList<String> banList) {
+		try {
+			FileOutputStream fileOutputStream = new FileOutputStream(banFile);
+			ObjectOutputStream objectOutputStream = new ObjectOutputStream(
+					fileOutputStream);
+			objectOutputStream.writeObject(banList);
+			objectOutputStream.close();
+			fileOutputStream.close();
+		} catch (Exception e) {
+			e.printStackTrace();
+			return false;
+		}
+		return true;
+	}
+	
 }
 

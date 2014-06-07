@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
+import org.apache.commons.lang3.StringUtils;
+
 import twitter4j.conf.Configuration;
 import twitter4j.conf.ConfigurationBuilder;
 
@@ -48,6 +50,7 @@ public class SetlistTest extends TestCase {
 		setlist.postTweet("[Final:] Test message 12", "TEST GAME MESSAGE 12", null, -1, true);
 		setlist.postTweet("Test message 13", "TEST GAME MESSAGE 13", null, -1, true);
 	}
+
 	public void testFullSetlist() {
 		ArrayList<String> symbolList = new ArrayList<String>(0);
 		symbolList.add("*");
@@ -60,63 +63,20 @@ public class SetlistTest extends TestCase {
     	symbolList.add("%");
 		Setlist setlist = new Setlist("", 0, true, setupDevConfig(),
 				setupDevConfig(), "D:\\setlist.jpg", "D:\\roboto.ttf", 21, 70,
-				"", "", "", null, symbolList, "");
-		setlist.runSetlistCheck("C:\\Users\\Jeff\\Desktop\\testEighteen.txt");
-		List<String> locList = setlist.getLocList();
-		List<String> setList = setlist.getSetList();
-		List<String> noteList = setlist.getNoteList();
-		Map<Integer, String> noteMap = setlist.getNoteMap();
-		StringBuilder sb = new StringBuilder();
-		if (locList.size() < 4)
-        	locList.add(1, "Dave Matthews Band");
-        for (String loc : locList) {
-        	sb.append(loc);
-        	sb.append("\n");
-        }
-        sb.append("\n");
-        for (String set : setList) {
-        	if (set.toLowerCase().equals("encore:")) {
-    			sb.append("\n");
-    			sb.append(set);
-    			sb.append("\n");
-        	}
-        	else if (set.toLowerCase().equals("set break")) {
-    			sb.append("\n");
-    			sb.append(set);
-    			sb.append("\n");
-    			sb.append("\n");
-        	}
-        	else {
-        		sb.append(set);
-        		sb.append("\n");
-        	}
-        }
-        if (!noteMap.isEmpty()) {
-        	for (Entry<Integer, String> note : noteMap.entrySet()) {
-        		sb.append("\n");
-            	sb.append(note.getValue());
-        	}
-        }
-        else if (!noteList.isEmpty()) {
-        	for (String note : noteList) {
-        		sb.append("\n");
-            	sb.append(note);
-        	}
-        }
-        System.out.println(sb.toString());
-        System.out.println(setList);
+				"", "", "", "", null, symbolList, "");
+		setlist.runSetlistCheck("C:\\Users\\Jeff\\Desktop\\testOne.txt");
 	}
-	*/
+	
 	public void testMassageAnswer() {
 		Setlist setlist = new Setlist("", 0, true, setupDevConfig(),
 				setupDevConfig(), "D:\\setlist.jpg", "D:\\roboto.ttf", 21, 70,
-				"", "", "", null, null, "");
+				"", "", "", "", null, null, "");
 		System.out.println(setlist.massageAnswer("Sister5||"));
 		System.out.println(setlist.massageAnswer("SisterÄ"));
 		System.out.println(setlist.massageAnswer("Sister@"));
 		System.out.println(setlist.massageAnswer("Sister~"));
 	}
-	/*
+
 	public void testFindWinners() {
 		Setlist setlist = new Setlist("", 0, true, setupDevConfig(),
 				setupDevConfig(), "", "", 0, 0, "", "", "", null, "");
@@ -146,4 +106,20 @@ public class SetlistTest extends TestCase {
 				winnerMap);
 	}
 	*/
+	public void testBanList() {
+		Setlist setlist = new Setlist("", 0, true, setupDevConfig(),
+				setupDevConfig(), "D:\\setlist.jpg", "D:\\roboto.ttf", 21, 70,
+				"", "", "", "D:\\banlist.ser", null, null, "");
+		setlist.addAnswer("jeffthefate", "JTR");
+		setlist.addAnswer("Copperpot5", "JTR");
+		setlist.banUser("jeffthefate");
+		System.out.println(setlist.getBanList());
+		System.out.println(setlist.findWinners("jtr", "Current Song [JTR]"));
+		setlist.unbanUser("jeffthefate");
+		System.out.println(setlist.getBanList());
+		setlist.addAnswer("jeffthefate", "JTR");
+		setlist.addAnswer("Copperpot5", "JTR");
+		System.out.println(setlist.findWinners("jtr", "Current Song [JTR]"));
+	}
+
 }
