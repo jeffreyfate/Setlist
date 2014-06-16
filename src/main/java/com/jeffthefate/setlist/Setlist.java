@@ -19,7 +19,6 @@ import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.nio.ByteBuffer;
@@ -39,9 +38,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Random;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.TimeZone;
 import java.util.TreeMap;
 
@@ -65,14 +61,17 @@ import org.apache.http.conn.ssl.BrowserCompatHostnameVerifier;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
 import org.apache.http.conn.ssl.SSLContexts;
 import org.apache.http.conn.ssl.X509HostnameVerifier;
+import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.apache.http.message.BasicNameValuePair;
 import org.apache.http.util.EntityUtils;
+import org.apache.log4j.Logger;
 import org.codehaus.jackson.JsonFactory;
 import org.codehaus.jackson.JsonParseException;
 import org.codehaus.jackson.JsonParser;
+import org.codehaus.jackson.JsonToken;
 import org.codehaus.jackson.node.ArrayNode;
 import org.codehaus.jackson.node.JsonNodeFactory;
 import org.codehaus.jackson.node.ObjectNode;
@@ -84,34 +83,25 @@ import org.jsoup.nodes.Node;
 import org.jsoup.nodes.TextNode;
 import org.jsoup.select.Elements;
 
-import twitter4j.DirectMessage;
-import twitter4j.FilterQuery;
-import twitter4j.StallWarning;
 import twitter4j.Status;
-import twitter4j.StatusDeletionNotice;
 import twitter4j.StatusUpdate;
 import twitter4j.Twitter;
 import twitter4j.TwitterException;
 import twitter4j.TwitterFactory;
-import twitter4j.TwitterStream;
-import twitter4j.TwitterStreamFactory;
-import twitter4j.User;
-import twitter4j.UserList;
 import twitter4j.UserMentionEntity;
-import twitter4j.UserStreamListener;
 import twitter4j.conf.Configuration;
 
 import com.jeffthefate.Screenshot;
 import com.jeffthefate.SetlistScreenshot;
 import com.jeffthefate.TriviaScreenshot;
 
-public class Setlist implements UserStreamListener {
+public class Setlist /*implements UserStreamListener*/ {
 
     private static final String DATE_FORMAT = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'";
     private static final String TWEET_DATE_FORMAT = "MM/dd/yy";
     
-    private final String FINAL_SCORES = "[Final Scores]";
-    private final String CURRENT_SCORES = "[Current Scores]";
+    public final String FINAL_SCORES = "[Final Scores]";
+    public final String CURRENT_SCORES = "[Current Scores]";
     
     private static String lastSong = "";
     private static boolean hasEncore = false;
@@ -130,7 +120,8 @@ public class Setlist implements UserStreamListener {
     private static Screenshot screenshot;
     
     private String url;
-    private long duration;
+    private int durationHours = 5;
+    private long duration = durationHours * 60 * 60 * 1000;
     
     private boolean isDev;
     
@@ -153,7 +144,7 @@ public class Setlist implements UserStreamListener {
     private ArrayList<ArrayList<String>> nameList =
     		new ArrayList<ArrayList<String>>(0);
     
-    private TwitterStream twitterStream;
+    //private TwitterStream twitterStream;
     private boolean kill = false;
     
     private static ArrayList<String> locList = new ArrayList<String>();
@@ -172,9 +163,17 @@ public class Setlist implements UserStreamListener {
     
     private String finalTweetText = null;
     
+    private boolean inSetlist = false;
+    
+    private String venueId = null;
+    private String venueName = null;
+    private String venueCity = null;
+    
+    private static Logger logger = Logger.getLogger(Setlist.class);
+    
     // java -jar /home/Setlist-One.jar 14400000 >> ...
     
-    public Setlist(String url, long duration, boolean isDev,
+    public Setlist(String url, boolean isDev,
     		Configuration setlistConfig, Configuration gameConfig,
     		String setlistJpgFilename, String fontFilename, int fontSize,
     		int verticalOffset, String setlistFilename, String lastSongFilename,
@@ -182,7 +181,6 @@ public class Setlist implements UserStreamListener {
     		ArrayList<ArrayList<String>> nameList,
     		ArrayList<String> symbolList, String currAccount) {
     	this.url = url;
-    	this.duration = duration;
     	this.isDev = isDev;
     	this.setlistConfig = setlistConfig;
     	this.gameConfig = gameConfig;
@@ -200,25 +198,66 @@ public class Setlist implements UserStreamListener {
     }
     
     public void startSetlist() {
-    	watchTwitterStream();
+    	logger.info("Starting setlist...");
+    	//watchTwitterStream();
     	endTime = System.currentTimeMillis() + duration;
+    	inSetlist = true;
     	do {
     		runSetlistCheck(url);
     		try {
 				Thread.sleep(10000);
 			} catch (InterruptedException e) {}
     	} while (endTime >= System.currentTimeMillis() && !kill);
-    	System.out.println("duration: " + duration);
+    	logger.debug("duration: " + duration);
     	if (duration > 0) {
     		screenshot = new SetlistScreenshot(setlistJpgFilename, fontFilename,
     				setlistText, fontSize, verticalOffset);
     		updateStatus(setlistConfig, finalTweetText,
     				new File(screenshot.getOutputFilename()), -1);
-    		postSetlistScoresImage(FINAL_SCORES, "Top Scores",
-					usersMap);
+    		postSetlistScoresImage(FINAL_SCORES);
     	}
-    	twitterStream.cleanUp();
-    	twitterStream.shutdown();
+    	inSetlist = false;
+    	//twitterStream.cleanUp();
+    	//twitterStream.shutdown();
+    }
+    
+    private void setVenueId(String venueId) {
+    	this.venueId = venueId;
+    }
+    
+    private String getVenueId() {
+    	return venueId;
+    }
+    
+    private void setVenueName(String venueName) {
+    	this.venueName = venueName;
+    }
+    
+    private String getVenueName() {
+    	return venueName;
+    }
+    
+    private void setVenueCity(String venueCity) {
+    	this.venueCity = venueCity;
+    }
+    
+    private String getVenueCity() {
+    	return venueCity;
+    }
+    
+    public void setKill(boolean kill) {
+    	this.kill = kill;
+    }
+    
+    public int getDurationHours() {
+    	return durationHours;
+    }
+    
+    public void setDuration(int hours) {
+    	if (hours <= 10) {
+    		durationHours = hours;
+    		duration = hours * 60 * 60 * 1000;
+    	}
     }
     
     public List<String> getLocList() {
@@ -251,8 +290,8 @@ public class Setlist implements UserStreamListener {
     public void runSetlistCheck(String url) {
     	cal = Calendar.getInstance(TimeZone.getDefault());
         cal.setTimeInMillis(System.currentTimeMillis());
-        System.out.println(cal.getTime().toString());
-        System.out.println(Charset.defaultCharset().displayName());
+        logger.info(cal.getTime().toString());
+        logger.info(Charset.defaultCharset().displayName());
         /*
         postNotification(getPushJsonString("Show begins @ 8:05 pm EDT", "Jun 16 2013\nDave Matthews Band\nComcast Center\nMansfield, MA\n\nShow begins @ 8:05 pm EDT\n",
                 getExpireDateString()));
@@ -274,7 +313,7 @@ public class Setlist implements UserStreamListener {
 		sb.append(" - ");
 		sb.append(locList.get(locList.size()-2));
 		finalTweetText = sb.toString();
-		System.out.println(sb.toString());
+		logger.info(sb.toString());
 		sb = new StringBuilder();
         for (String loc : locList) {
         	sb.append(loc);
@@ -282,11 +321,11 @@ public class Setlist implements UserStreamListener {
         }
         if (setList.size() >= 2 && setList.get(setList.size()-1).equals(
         		setList.get(setList.size()-2))) {
-        	System.out.println("Removed " + setList.remove(setList.size()-1));
+        	logger.info("Removed " + setList.remove(setList.size()-1));
         }
         // Replace note symbols
-        System.out.println("Old symbols:");
-        System.out.println(setList);
+        logger.info("Old symbols:");
+        logger.info(setList);
 		String noteChar = "";
 		ArrayList<String> newSymbols = new ArrayList<String>(setList);
 		for (int i = 0; i < newSymbols.size(); i++) {
@@ -302,14 +341,14 @@ public class Setlist implements UserStreamListener {
 				if (!replacementMap.containsKey(noteChar)) {
 					replacementMap.put(noteChar,
 							symbolList.get(replacementMap.size()));
-					System.out.println(replacementMap);
+					logger.info(replacementMap);
 				}
 				newSymbols.set(i, newSymbols.get(i).replace(noteChar,
 						replacementMap.get(noteChar)));
 			}
 		}
-		System.out.println("New symbols:");
-        System.out.println(newSymbols);
+		logger.info("New symbols:");
+        logger.info(newSymbols);
 		// TODO Replace in notes
         // We need a spacer new line in these scenarios:
         //     Between location block and set list
@@ -355,18 +394,18 @@ public class Setlist implements UserStreamListener {
         	}
         }
         setlistText = sb.toString();
-        System.out.println(setlistText);
+        logger.info(setlistText);
         // createScreenshot(setlistText);
         String setlistFile = setlistFilename +
                 (currDateString.replace('/', '_')) + ".txt";
         String lastSongFile = lastSongFilename +
                 (currDateString.replace('/', '_')) + ".txt";
         String lastSetlist = readStringFromFile(setlistFile);
-        System.out.println("lastSetlist:");
-        System.out.println(lastSetlist);
+        logger.info("lastSetlist:");
+        logger.info(lastSetlist);
         String diff = StringUtils.difference(lastSetlist, setlistText);
-        System.out.println("diff:");
-        System.out.println(diff);
+        logger.info("diff:");
+        logger.info(diff);
         boolean hasChange = !StringUtils.isBlank(diff);
         sb.setLength(0);
         if (hasChange) {
@@ -375,6 +414,7 @@ public class Setlist implements UserStreamListener {
             // 0 if a new setlist (latest)
             // 1 if there is a newer date available already
             int newDate = uploadLatest(setlistText);
+            getVenueFromResponse(getResponse("Venue", getVenueId()));
             /*
             if (getLatestDate().after(convertStringToDate(DATE_FORMAT,
             		currDateString)))
@@ -385,7 +425,7 @@ public class Setlist implements UserStreamListener {
             		!lastSongFromFile.equals(lastSong))) {
             	if (!stripSpecialCharacters(lastSongFromFile).equals(
             			stripSpecialCharacters(lastSong))) {
-            		System.out.println("POST NOTIFICATION AND TWEET: " +
+            		logger.info("POST NOTIFICATION AND TWEET: " +
             				lastSong);
             		String gameMessage = "";
             		if (!isDev) {
@@ -413,7 +453,7 @@ public class Setlist implements UserStreamListener {
 	                		new File(screenshot.getOutputFilename()), -1, true);
             	}
             	else {
-            		System.out.println("POST NOTIFICATION: BLANK");
+            		logger.info("POST NOTIFICATION: BLANK");
             		if (!isDev) {
             			postNotification(getPushJsonString("", setlistText,
             					getExpireDateString()));
@@ -422,7 +462,7 @@ public class Setlist implements UserStreamListener {
                 writeStringToFile(lastSong, lastSongFile);
             }
             else if (readStringFromFile(lastSongFile).equals(lastSong)) {
-            	System.out.println("POST NOTIFICATION: BLANK");
+            	logger.info("POST NOTIFICATION: BLANK");
             	if (!isDev) {
             		postNotification(getPushJsonString("", setlistText,
             				getExpireDateString()));
@@ -457,10 +497,10 @@ public class Setlist implements UserStreamListener {
         					}
         				}
         			}
-        			System.out.println("noteUpdate: " + noteUpdate);
+        			logger.info("noteUpdate: " + noteUpdate);
             	}
             }
-            System.out.println(html);
+            logger.info(html);
         }
         locList.clear();
         setList.clear();
@@ -484,18 +524,18 @@ public class Setlist implements UserStreamListener {
         else	
         	setlistText = latestSetlist("https://whsec1.davematthewsband.com/backstage.asp");
         //String setlistText = latestSetlist("http://jeffthefate.com/dmb-trivia-test");
-        System.out.println(setlistText);
+        logger.info(setlistText);
         currDateString = getSetlistDateString(setlistText);
         String setlistFile = SETLIST_FILENAME +
                 (currDateString.replace('/', '_')) + ".txt";
         String lastSongFile = LAST_SONG_FILENAME +
                 (currDateString.replace('/', '_')) + ".txt";
         String lastSetlist = readStringFromFile(setlistFile);
-        System.out.println("lastSetlist:");
-        System.out.println(lastSetlist);
+        logger.info("lastSetlist:");
+        logger.info(lastSetlist);
         String diff = StringUtils.difference(lastSetlist, setlistText);
-        System.out.println("diff:");
-        System.out.println(diff);
+        logger.info("diff:");
+        logger.info(diff);
         boolean hasChange = !StringUtils.isBlank(diff);
         StringBuilder sb = new StringBuilder();
         if (hasChange) {
@@ -564,7 +604,7 @@ public class Setlist implements UserStreamListener {
     	try {
             date = dateFormat.parse(dateString);
         } catch (ParseException e2) {
-            System.out.println("Failed to parse date from " + dateString);
+            logger.info("Failed to parse date from " + dateString);
             e2.printStackTrace();
         }
     	return date;
@@ -643,11 +683,11 @@ public class Setlist implements UserStreamListener {
                 html = EntityUtils.toString(response.getEntity(), "UTF-8");
                 html = StringEscapeUtils.unescapeHtml4(html);
             } catch (ClientProtocolException e1) {
-                System.out.println("Failed to connect to " +
+                logger.info("Failed to connect to " +
                         getMethod.getURI().toASCIIString());
                 e1.printStackTrace();
             } catch (IOException e1) {
-                System.out.println("Failed to get setlist from " +
+                logger.info("Failed to get setlist from " +
                         getMethod.getURI().toASCIIString());
                 e1.printStackTrace();
             }
@@ -661,7 +701,6 @@ public class Setlist implements UserStreamListener {
                 for (Element link : links) {
                     currUrl = "https://whsec1.davematthewsband.com/" +
                     		link.attr("href");
-                    System.out.println();
                     getMethod = new HttpGet(currUrl);
                     sb = new StringBuilder();
                     html = null;
@@ -671,11 +710,11 @@ public class Setlist implements UserStreamListener {
                         		"UTF-8");
                         html = StringEscapeUtils.unescapeHtml4(html);
                     } catch (ClientProtocolException e1) {
-                        System.out.println("Failed to connect to " +
+                        logger.info("Failed to connect to " +
                                 getMethod.getURI().toASCIIString());
                         e1.printStackTrace();
                     } catch (IOException e1) {
-                        System.out.println("Failed to get setlist from " +
+                        logger.info("Failed to get setlist from " +
                                 getMethod.getURI().toASCIIString());
                         e1.printStackTrace();
                     }
@@ -691,7 +730,7 @@ public class Setlist implements UserStreamListener {
                     boolean b = false;
                     int slot = 0;
                     String setlistId = null;
-                    System.out.println("nulling lastPlay");
+                    logger.info("nulling lastPlay");
                     String lastPlay = null;
                     boolean hasSetCloser = false;
                     hasEncore = false;
@@ -715,7 +754,7 @@ public class Setlist implements UserStreamListener {
                                     for (Node node : single.childNodes()) {
                                         if (!(node instanceof Comment)) {
                                             if (node instanceof TextNode) {
-                                            	System.out.println(
+                                            	logger.info(
                                             			"TextNode is blank: " +
                                             			StringUtils.isBlank(
                                         					((TextNode) node)
@@ -728,10 +767,10 @@ public class Setlist implements UserStreamListener {
                                             				setlistId,
                                             				slot == 1, false,
                                             				false);
-                                            		System.out.println(
+                                            		logger.info(
                                             				"TextNode nulling" +
                                             				" lastPlay");
-                                            		System.out.println(
+                                            		logger.info(
                                             				"TextNode: '" +
                                     						((TextNode) node)
                                     							.text() + "'");
@@ -763,7 +802,7 @@ public class Setlist implements UserStreamListener {
                                                     			slot == 1, true,
                                                     			false);
                                                         	hasSetCloser = true;
-                                                        	System.out.println(
+                                                        	logger.info(
                                                     			"div nulling " +
                                                     			"lastPlay");
                                                         	lastPlay = null;
@@ -831,19 +870,19 @@ public class Setlist implements UserStreamListener {
                                                         			slot == 1,
                                                         			false,
                                                         			true);
-                                                        	System.out.println(
+                                                        	logger.info(
                                                     			"br nulling " +
                                                     			"lastPlay");
                                                         	lastPlay = null;
                                                         }
                                                     }
                                                     if (!firstBreak) {
-                                                    	System.out.println(
+                                                    	logger.info(
                                                 			"NOT firstBreak");
-                                                    	System.out.println(
+                                                    	logger.info(
                                                 			"lastPlay: " +
                                         					lastPlay);
-                                                    	System.out.println(
+                                                    	logger.info(
                                                 			"hasSetCloser: " +
                                         					hasSetCloser);
                                                         setString.append("\n");
@@ -856,7 +895,7 @@ public class Setlist implements UserStreamListener {
                                                     			slot == 1, true,
                                                     			false);
                                                         	hasSetCloser = true;
-                                                        	System.out.println(
+                                                        	logger.info(
                                                     			"!firstBreak " +
                                                     			"nulling lastPlay");
                                                         	lastPlay = null;
@@ -1011,11 +1050,11 @@ public class Setlist implements UserStreamListener {
             html = EntityUtils.toString(response.getEntity(), "UTF-8");
             html = StringEscapeUtils.unescapeHtml4(html);
         } catch (ClientProtocolException e1) {
-            System.out.println("Failed to connect to " +
+            logger.info("Failed to connect to " +
                     getMethod.getURI().toASCIIString());
             e1.printStackTrace();
         } catch (IOException e1) {
-            System.out.println("Failed to get setlist from " +
+            logger.info("Failed to get setlist from " +
                     getMethod.getURI().toASCIIString());
             e1.printStackTrace();
         }
@@ -1176,7 +1215,7 @@ public class Setlist implements UserStreamListener {
                 }
             }
         }
-        System.out.println("lastSong: " + lastSong);
+        logger.info("lastSong: " + lastSong);
         return locString.append("\n").append(setString).toString();
     }
     
@@ -1236,11 +1275,11 @@ public class Setlist implements UserStreamListener {
             html = EntityUtils.toString(response.getEntity(), "UTF-8");
             html = StringEscapeUtils.unescapeHtml4(html);
         } catch (ClientProtocolException e1) {
-            System.out.println("Failed to connect to " +
+            logger.info("Failed to connect to " +
                     getMethod.getURI().toASCIIString());
             e1.printStackTrace();
         } catch (IOException e1) {
-            System.out.println("Failed to get setlist from " +
+            logger.info("Failed to get setlist from " +
                     getMethod.getURI().toASCIIString());
             e1.printStackTrace();
         }
@@ -1275,28 +1314,28 @@ public class Setlist implements UserStreamListener {
             	if (div.hasAttr("style")) {
             		divStyle = div.attr("style");
             		if (divStyle.equals(locStyle))
-            			System.out.println("LOC: " + div.ownText());
+            			logger.info("LOC: " + div.ownText());
         			else if (divStyle.equals(setStyle)) {
         				String divText = div.ownText();
-        				System.out.println("SET: " + divText);
-        				System.out.println("COUNT: " + StringUtils.countMatches(
+        				logger.info("SET: " + divText);
+        				logger.info("COUNT: " + StringUtils.countMatches(
         						divText, String.valueOf(endChar)));
         				String[] setAndNotes = divText.split(
         						"(([\\s]*)[" + String.valueOf(endChar) +
         						"]([\\s]*)){3}");
         				for (int i = 0; i < setAndNotes.length; i++) {
-        					System.out.println(setAndNotes[i]);
+        					logger.info(setAndNotes[i]);
         				}
         				sb.append(StringUtils.remove(divText, endChar));
-        				System.out.println("SET: " + sb.toString());
+        				logger.info("SET: " + sb.toString());
         				String[] sections = sb.toString().split(
         						"-------- ENCORE --------");
         				for (int i = 0; i < sections.length; i++) {
-        					System.out.println(sections[i]);
+        					logger.info(sections[i]);
         				}
         				String[] songs = sections[0].split("\\d+[\\.]{1}");
         				for (int i = 0; i < songs.length; i++) {
-        					System.out.println(songs[i]);
+        					logger.info(songs[i]);
         				}
         			}
             	}
@@ -1314,11 +1353,11 @@ public class Setlist implements UserStreamListener {
                         for (Node node : single.childNodes()) {
                             if (!(node instanceof Comment)) {
                                 if (node instanceof TextNode) {
-                                	System.out.println("TextNode is blank: " + StringUtils.isBlank(((TextNode) node).text()));
+                                	logger.info("TextNode is blank: " + StringUtils.isBlank(((TextNode) node).text()));
                                 	if (lastPlay != null && !StringUtils.isBlank(((TextNode) node).text())) {
                                 		uploadSong(lastPlay, ++slot, setlistId, slot == 1, false, false);
-                                		System.out.println("TextNode nulling lastPlay");
-                                		System.out.println("TextNode: '" + ((TextNode) node).text() + "'");
+                                		logger.info("TextNode nulling lastPlay");
+                                		logger.info("TextNode: '" + ((TextNode) node).text() + "'");
                                 		lastPlay = null;
                                 	}
                                     sb.append(StringUtils.remove(((TextNode) node).text(), endChar));
@@ -1336,7 +1375,7 @@ public class Setlist implements UserStreamListener {
                                             if (lastPlay != null && !hasSetCloser) {
                                             	uploadSong(lastPlay, ++slot, setlistId, slot == 1, true, false);
                                             	hasSetCloser = true;
-                                            	System.out.println("div nulling lastPlay");
+                                            	logger.info("div nulling lastPlay");
                                             	lastPlay = null;
                                             }
                                             if (!firstBreak) {
@@ -1381,20 +1420,20 @@ public class Setlist implements UserStreamListener {
                                             secondBreak = true;
                                             if (lastPlay != null) {
                                             	uploadSong(lastPlay, ++slot, setlistId, slot == 1, false, true);
-                                            	System.out.println("br nulling lastPlay");
+                                            	logger.info("br nulling lastPlay");
                                             	lastPlay = null;
                                             }
                                         }
                                         if (!firstBreak) {
-                                        	System.out.println("NOT firstBreak");
-                                        	System.out.println("lastPlay: " + lastPlay);
-                                        	System.out.println("hasSetCloser: " + hasSetCloser);
+                                        	logger.info("NOT firstBreak");
+                                        	logger.info("lastPlay: " + lastPlay);
+                                        	logger.info("hasSetCloser: " + hasSetCloser);
                                             setString.append("\n");
                                             firstBreak = true;
                                             if (lastPlay != null && !hasSetCloser) {
                                             	uploadSong(lastPlay, ++slot, setlistId, slot == 1, true, false);
                                             	hasSetCloser = true;
-                                            	System.out.println("!firstBreak nulling lastPlay");
+                                            	logger.info("!firstBreak nulling lastPlay");
                                             	lastPlay = null;
                                             }
                                         }
@@ -1465,7 +1504,7 @@ public class Setlist implements UserStreamListener {
             }
             */
         }
-        System.out.println("lastSong: " + lastSong);
+        logger.info("lastSong: " + lastSong);
         return locString.append("\n").append(setString).toString();
     }
     
@@ -1515,7 +1554,7 @@ public class Setlist implements UserStreamListener {
 	        } catch (IOException e1) {}
 	        if (response == null || (response.getStatusLine().getStatusCode() !=
 	                200 && response.getStatusLine().getStatusCode() != 302))
-	        	System.out.println("Failed to get response from to " +
+	        	logger.info("Failed to get response from to " +
 	                    postMethod.getURI().toASCIIString());
 	        HttpGet getMethod = new HttpGet(url);
 	        String html = null;
@@ -1526,11 +1565,11 @@ public class Setlist implements UserStreamListener {
 	            html = EntityUtils.toString(response.getEntity(), "UTF-8");
 	            html = StringEscapeUtils.unescapeHtml4(html);
 	        } catch (ClientProtocolException e1) {
-	            System.out.println("Failed to connect to " +
+	            logger.info("Failed to connect to " +
 	                    getMethod.getURI().toASCIIString());
 	            e1.printStackTrace();
 	        } catch (IOException e1) {
-	            System.out.println("Failed to get setlist from " +
+	            logger.info("Failed to get setlist from " +
 	                    getMethod.getURI().toASCIIString());
 	            e1.printStackTrace();
 	        }
@@ -1662,7 +1701,7 @@ public class Setlist implements UserStreamListener {
         	                                	if (!StringUtils.isBlank(
         	                                			nodeText)) {
         	                                		if (segue) {
-        	                                			System.out.println(
+        	                                			logger.info(
     	                                					"segue: " +
                                 							divStyleLocation);
         	                                			if (divStyleLocation > -1)
@@ -1686,14 +1725,14 @@ public class Setlist implements UserStreamListener {
         	                                					.toLowerCase()
         	                                					.contains(
     	                                							"show notes")) {
-        	                                				System.out.println(
+        	                                				logger.info(
     	                                						"show notes: " +
                                 								divStyleLocation);
         	                                				if (divStyleLocation > -1)
         	                                					noteMap.put(
     	                                							divStyleLocation,
     	                                							oldNote.concat("Notes:"));
-        	                                				System.out.println(
+        	                                				logger.info(
         	                                						"Notes:");
         	                                				noteList.add(0,
     	                                						"Notes:");
@@ -1701,7 +1740,7 @@ public class Setlist implements UserStreamListener {
         	                                			}
         	                                			else {
         	                                				if (hasGuest) {
-        	                                					System.out.println(
+        	                                					logger.info(
     	                                							"hasGuest: " +
                                 									divStyleLocation);
         	                                					if (divStyleLocation > -1)
@@ -1717,7 +1756,7 @@ public class Setlist implements UserStreamListener {
         	                                				}
         	                                				else if (firstPartial ||
         	                                						lastPartial) {
-        	                                					System.out.println(
+        	                                					logger.info(
     	                                							"partial: " +
                                 									divStyleLocation);
         	                                					if (divStyleLocation > -1)
@@ -1732,7 +1771,7 @@ public class Setlist implements UserStreamListener {
                                 											StringUtils.trim(nodeText)));
         	                                				}
         	                                				else {
-        	                                					System.out.println(
+        	                                					logger.info(
     	                                							"other: " +
                                 									divStyleLocation);
         	                                					if (divStyleLocation > -1)
@@ -1743,7 +1782,7 @@ public class Setlist implements UserStreamListener {
         	                                					noteList.add(
     	                                							StringUtils.trim(
 	                                									nodeText));
-        	                                					System.out.println(
+        	                                					logger.info(
         	                                							StringUtils.trim(
         	                                									nodeText));
         	                                				}
@@ -1754,14 +1793,14 @@ public class Setlist implements UserStreamListener {
         	                                	}
         	                                }
         	                                else if (child.nodeName().equals("img")) {
-        	                                	System.out.println("img: " +
+        	                                	logger.info("img: " +
         	                                			divStyleLocation);
         	                                	if (divStyleLocation > -1)
         	                                		noteMap.put(divStyleLocation,
     	                                				oldNote.concat("\n")
     	                                				.concat("-> "));
         	                                	noteList.add("-> ");
-        	                                	System.out.println("-> ");
+        	                                	logger.info("-> ");
         	                                	segue = true;
         	                                }
         	                                else if (child.nodeName().equals(
@@ -1775,7 +1814,7 @@ public class Setlist implements UserStreamListener {
         	                        							.text();
         	                        					if (fontText.contains("(")) {
         	                        						firstPartial = true;
-        	                        						System.out.println(
+        	                        						logger.info(
     	                        								"partial: " +
                         										divStyleLocation);
         	                        						if (divStyleLocation > -1)
@@ -1786,10 +1825,10 @@ public class Setlist implements UserStreamListener {
 	                        												StringUtils.trim(fontText)));
         	                        						noteList.add(
     	                        								fontText);
-        	                        						System.out.println(fontText);
+        	                        						logger.info(fontText);
         	                        					} else if (fontText.contains(")")) {
         	                        						lastPartial = true;
-        	                        						System.out.println(
+        	                        						logger.info(
     	                        								"partial: " +
                         										divStyleLocation);
         	                        						if (divStyleLocation > -1)
@@ -1806,7 +1845,7 @@ public class Setlist implements UserStreamListener {
                         													.concat(" ")));
         	                        					} else {
         	                        						hasGuest = true;
-        	                        						System.out.println(
+        	                        						logger.info(
     	                        								"guest: " +
                         										divStyleLocation);
         	                        						if (divStyleLocation > -1)
@@ -1817,7 +1856,7 @@ public class Setlist implements UserStreamListener {
 	                        												.concat(" ")));
         	                        						noteList.add(
     	                        								fontText.concat(" "));
-        	                        						System.out.println(
+        	                        						logger.info(
         	                        								fontText.concat(" "));
         	                        					}
         	                        				}
@@ -1843,7 +1882,7 @@ public class Setlist implements UserStreamListener {
     					currSong = StringUtils.replaceChars(
                         		songs[1], badChar, apos);
     					setList.add(currSong);
-    					System.out.println(currSong);
+    					logger.info(currSong);
     					lastSong = currSong;
     					// Reset break tracking
     					breaks = 0;
@@ -1855,7 +1894,7 @@ public class Setlist implements UserStreamListener {
     						if (divText.toLowerCase().contains("encore")) {
     							currSong = "Encore:";
     	    					setList.add(currSong);
-    	    					System.out.println(currSong);
+    	    					logger.info(currSong);
     	    					lastSong = currSong;
     	    					breaks = 0;
     						}
@@ -1863,7 +1902,7 @@ public class Setlist implements UserStreamListener {
     								"set break")) {
     							currSong = "Set Break";
     							setList.add(currSong);
-    							System.out.println(currSong);
+    							logger.info(currSong);
     							lastSong = currSong;
     							breaks = 0;
     						}
@@ -1875,7 +1914,7 @@ public class Setlist implements UserStreamListener {
 	                        	if (!StringUtils.isBlank(nodeText)) {
 	                        		if (noteList.isEmpty()) {
 	                					noteList.add("Notes:");
-	                					System.out.println("Notes:");
+	                					logger.info("Notes:");
 	                        		}
 	                        		// If a img tag is found within the notes,
 	                        		// a -> is added so this node text should
@@ -1903,7 +1942,7 @@ public class Setlist implements UserStreamListener {
                         				else {
                         					noteList.add(StringUtils.trim(
                         							nodeText));
-                        					System.out.println(StringUtils.trim(
+                        					logger.info(StringUtils.trim(
                         							nodeText));
                         					breaks = 0;
                         				}
@@ -1917,13 +1956,13 @@ public class Setlist implements UserStreamListener {
     				}
                 }
             	else if (node instanceof Element) {
-            		System.out.println("firstBreak: " + firstBreak);
-    				System.out.println("hasEncore: " + hasEncore);
-    				System.out.println("secondBreak: " + secondBreak);
+            		logger.info("firstBreak: " + firstBreak);
+    				logger.info("hasEncore: " + hasEncore);
+    				logger.info("secondBreak: " + secondBreak);
             		// Found a segue image
             		if (node.nodeName().equals("img")) {
             			if (hasSong) {
-            				System.out.println("Adding ->");
+            				logger.info("Adding ->");
             				currSong = setList.get(setList.size()-1).concat(
             						" ->");
             				setList.set(setList.size()-1, currSong);
@@ -1932,10 +1971,10 @@ public class Setlist implements UserStreamListener {
             			else {
             				if (noteList.isEmpty()) {
             					noteList.add("Notes:");
-            					System.out.println("Notes:");
+            					logger.info("Notes:");
             				}
             				noteList.add("-> ");
-            				System.out.println("-> ");
+            				logger.info("-> ");
             				hasSegue = true;
             			}
             			// If either still in main set
@@ -1946,15 +1985,15 @@ public class Setlist implements UserStreamListener {
             			if ((firstBreak && !hasEncore) || secondBreak) {
             				if (noteList.isEmpty()) {
             					noteList.add("Notes:");
-            					System.out.println("Notes:");
+            					logger.info("Notes:");
             				}
                             noteList.add("-> ");
-                            System.out.println("-> ");
+                            logger.info("-> ");
                             hasSegue = true;
             			}
             			// If img tag is in the set
             			else {
-            				System.out.println("Adding ->");
+            				logger.info("Adding ->");
 		            		currSong = setList.get(setList.size()-1).concat(
 		            				" ->");
 		            		setList.set(setList.size()-1, currSong);
@@ -1972,7 +2011,7 @@ public class Setlist implements UserStreamListener {
             					hasGuest = true;
             					noteList.add(((TextNode) child).text().concat(
             							" "));
-            					System.out.println(((TextNode) child).text().concat(
+            					logger.info(((TextNode) child).text().concat(
             							" "));
             				}
             			}
@@ -2003,8 +2042,8 @@ public class Setlist implements UserStreamListener {
             			}
             		}
             	}
-            	//System.out.println(noteMap.toString());
-            	//System.out.println(noteList.toString());
+            	//logger.info(noteMap.toString());
+            	//logger.info(noteList.toString());
             }
             /*
             Elements divs = body.getElementsByTag("div");
@@ -2068,7 +2107,7 @@ public class Setlist implements UserStreamListener {
             for (Entry<Integer, String> song : songMap.entrySet()) {
             	currSong = song.getValue();
             	setList.add(currSong);
-            	System.out.println(currSong);
+            	logger.info(currSong);
             	lastSong = currSong;
             }
             int segueIndex = -1;
@@ -2103,11 +2142,11 @@ public class Setlist implements UserStreamListener {
                         for (Node node : single.childNodes()) {
                             if (!(node instanceof Comment)) {
                                 if (node instanceof TextNode) {
-                                	System.out.println("TextNode is blank: " + StringUtils.isBlank(((TextNode) node).text()));
+                                	logger.info("TextNode is blank: " + StringUtils.isBlank(((TextNode) node).text()));
                                 	if (lastPlay != null && !StringUtils.isBlank(((TextNode) node).text())) {
                                 		uploadSong(lastPlay, ++slot, setlistId, slot == 1, false, false);
-                                		System.out.println("TextNode nulling lastPlay");
-                                		System.out.println("TextNode: '" + ((TextNode) node).text() + "'");
+                                		logger.info("TextNode nulling lastPlay");
+                                		logger.info("TextNode: '" + ((TextNode) node).text() + "'");
                                 		lastPlay = null;
                                 	}
                                     sb.append(StringUtils.remove(((TextNode) node).text(), endChar));
@@ -2125,7 +2164,7 @@ public class Setlist implements UserStreamListener {
                                             if (lastPlay != null && !hasSetCloser) {
                                             	uploadSong(lastPlay, ++slot, setlistId, slot == 1, true, false);
                                             	hasSetCloser = true;
-                                            	System.out.println("div nulling lastPlay");
+                                            	logger.info("div nulling lastPlay");
                                             	lastPlay = null;
                                             }
                                             if (!firstBreak) {
@@ -2170,20 +2209,20 @@ public class Setlist implements UserStreamListener {
                                             secondBreak = true;
                                             if (lastPlay != null) {
                                             	uploadSong(lastPlay, ++slot, setlistId, slot == 1, false, true);
-                                            	System.out.println("br nulling lastPlay");
+                                            	logger.info("br nulling lastPlay");
                                             	lastPlay = null;
                                             }
                                         }
                                         if (!firstBreak) {
-                                        	System.out.println("NOT firstBreak");
-                                        	System.out.println("lastPlay: " + lastPlay);
-                                        	System.out.println("hasSetCloser: " + hasSetCloser);
+                                        	logger.info("NOT firstBreak");
+                                        	logger.info("lastPlay: " + lastPlay);
+                                        	logger.info("hasSetCloser: " + hasSetCloser);
                                             setString.append("\n");
                                             firstBreak = true;
                                             if (lastPlay != null && !hasSetCloser) {
                                             	uploadSong(lastPlay, ++slot, setlistId, slot == 1, true, false);
                                             	hasSetCloser = true;
-                                            	System.out.println("!firstBreak nulling lastPlay");
+                                            	logger.info("!firstBreak nulling lastPlay");
                                             	lastPlay = null;
                                             }
                                         }
@@ -2269,7 +2308,7 @@ public class Setlist implements UserStreamListener {
             dateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
             dateString = dateFormat.format(date.getTime());
         } catch (ParseException e2) {
-            System.out.println("Failed to parse date from " + subString);
+            logger.info("Failed to parse date from " + subString);
             e2.printStackTrace();
         }
         return dateString;
@@ -2284,7 +2323,7 @@ public class Setlist implements UserStreamListener {
             dateFormat = new SimpleDateFormat(DATE_FORMAT);
             dateString = dateFormat.format(date.getTime());
         } catch (ParseException e2) {
-            System.out.println("Failed to parse date from " + dateLine);
+            logger.info("Failed to parse date from " + dateLine);
             e2.printStackTrace();
         }
         return dateString;
@@ -2299,7 +2338,7 @@ public class Setlist implements UserStreamListener {
             dateFormat = new SimpleDateFormat("yyyy-MM-dd");
             dateString = dateFormat.format(date.getTime());
         } catch (ParseException e2) {
-            System.out.println("Failed to parse date from " + dateLine);
+            logger.info("Failed to parse date from " + dateLine);
             e2.printStackTrace();
         }
         return dateString;
@@ -2314,7 +2353,7 @@ public class Setlist implements UserStreamListener {
             dateFormat = new SimpleDateFormat(TWEET_DATE_FORMAT);
             dateString = dateFormat.format(date.getTime());
         } catch (Exception e) {
-            System.out.println("Failed to parse date from " + dateLine);
+            logger.info("Failed to parse date from " + dateLine);
             e.printStackTrace();
         }
         return dateString;
@@ -2338,7 +2377,7 @@ public class Setlist implements UserStreamListener {
         		"%7B%22%24exists%22%3Afalse%7D%7D%2C%7B%22trivia%22%3Afalse" +
         		"%7D%5D%7D");
         HttpGet httpGet = new HttpGet(url);
-        System.out.println(url);
+        logger.info(url);
         httpGet.addHeader("X-Parse-Application-Id",
         		"ImI8mt1EM3NhZNRqYZOyQpNSwlfsswW73mHsZV3R");
         httpGet.addHeader("X-Parse-REST-API-Key",
@@ -2346,22 +2385,22 @@ public class Setlist implements UserStreamListener {
         try {
             response = httpclient.execute(httpGet);
             if (response.getStatusLine().getStatusCode() != 200) {
-                System.out.println("GET questions failed!");
+                logger.info("GET questions failed!");
                 return -1;
             }
             entity = response.getEntity();
             if (entity != null)
                  responseString = EntityUtils.toString(response.getEntity());  
         } catch (ClientProtocolException e1) {
-            System.out.println("Failed to connect to " +
+            logger.info("Failed to connect to " +
                     httpGet.getURI().toASCIIString());
             e1.printStackTrace();
         } catch (IOException e1) {
-            System.out.println("Failed to get setlist from " +
+            logger.info("Failed to get setlist from " +
                     httpGet.getURI().toASCIIString());
             e1.printStackTrace();
         }
-        System.out.println("COUNT: " + responseString);
+        logger.info("COUNT: " + responseString);
         return getQuestionCountFromResponse(responseString);
     }
     
@@ -2385,15 +2424,15 @@ public class Setlist implements UserStreamListener {
         try {
             response = httpclient.execute(httpPut);
             if (response.getStatusLine().getStatusCode() != 200) {
-                System.out.println("PUT question " + objectId + " failed!");
+                logger.info("PUT question " + objectId + " failed!");
                 return;
             }
         } catch (ClientProtocolException e1) {
-            System.out.println("Failed to connect to " +
+            logger.info("Failed to connect to " +
             		httpPut.getURI().toASCIIString());
             e1.printStackTrace();
         } catch (IOException e1) {
-            System.out.println("Failed to get setlist from " +
+            logger.info("Failed to get setlist from " +
             		httpPut.getURI().toASCIIString());
             e1.printStackTrace();
         }
@@ -2411,9 +2450,9 @@ public class Setlist implements UserStreamListener {
     // Need to get a random question not recently asked
     private static Map<String, String> getQuestion(boolean isTrivia,
     		int limit, int skip) {
-    	System.out.println("isTrivia: " + isTrivia);
-    	System.out.println("limit: " + limit);
-    	System.out.println("skip: " + skip);
+    	logger.info("isTrivia: " + isTrivia);
+    	logger.info("limit: " + limit);
+    	logger.info("skip: " + skip);
         DefaultHttpClient httpclient = new DefaultHttpClient();
         HttpEntity entity = null;
         HttpResponse response = null;
@@ -2443,7 +2482,7 @@ public class Setlist implements UserStreamListener {
 		}
 		
         HttpGet httpGet = new HttpGet(url);
-        System.out.println(url);
+        logger.info(url);
         httpGet.addHeader("X-Parse-Application-Id",
         		"ImI8mt1EM3NhZNRqYZOyQpNSwlfsswW73mHsZV3R");
         httpGet.addHeader("X-Parse-REST-API-Key",
@@ -2451,18 +2490,18 @@ public class Setlist implements UserStreamListener {
         try {
             response = httpclient.execute(httpGet);
             if (response.getStatusLine().getStatusCode() != 200) {
-                System.out.println("GET questions failed!");
+                logger.info("GET questions failed!");
                 return null;
             }
             entity = response.getEntity();
             if (entity != null)
                  responseString = EntityUtils.toString(response.getEntity());  
         } catch (ClientProtocolException e1) {
-            System.out.println("Failed to connect to " +
+            logger.info("Failed to connect to " +
                     httpGet.getURI().toASCIIString());
             e1.printStackTrace();
         } catch (IOException e1) {
-            System.out.println("Failed to get setlist from " +
+            logger.info("Failed to get setlist from " +
                     httpGet.getURI().toASCIIString());
             e1.printStackTrace();
         }
@@ -2471,7 +2510,7 @@ public class Setlist implements UserStreamListener {
     */
     private String getSetlist(String latestSetlist) {
         String dateString = getNewSetlistDateString(latestSetlist);
-        System.out.println("getSetlist dateString: " + dateString);
+        logger.info("getSetlist dateString: " + dateString);
         if (dateString == null)
             return null;
         HttpClient httpclient = HttpClientBuilder.create().build();
@@ -2494,22 +2533,22 @@ public class Setlist implements UserStreamListener {
         try {
             response = httpclient.execute(httpGet);
             if (response.getStatusLine().getStatusCode() != 200) {
-                System.out.println("GET of " + dateString + " failed!");
+                logger.info("GET of " + dateString + " failed!");
                 return null;
             }
             entity = response.getEntity();
             if (entity != null)
                  responseString = EntityUtils.toString(response.getEntity());  
         } catch (ClientProtocolException e1) {
-            System.out.println("Failed to connect to " +
+            logger.info("Failed to connect to " +
                     httpGet.getURI().toASCIIString());
             e1.printStackTrace();
         } catch (IOException e1) {
-            System.out.println("Failed to get setlist from " +
+            logger.info("Failed to get setlist from " +
                     httpGet.getURI().toASCIIString());
             e1.printStackTrace();
         }
-        System.out.println("getSetlist responseString: " + responseString);
+        logger.info("getSetlist responseString: " + responseString);
         return responseString;
     }
     
@@ -2529,8 +2568,8 @@ public class Setlist implements UserStreamListener {
             httpPost.setEntity(reqEntity);
             response = httpclient.execute(httpPost);
             if (response.getStatusLine().getStatusCode() != 201) {
-                System.out.println("POST of setlist failed!");
-                System.out.println(json);
+                logger.info("POST of setlist failed!");
+                logger.info(json);
             } 
             else {
             	HttpEntity entity = response.getEntity();
@@ -2541,14 +2580,14 @@ public class Setlist implements UserStreamListener {
 	            }
             }
         } catch (UnsupportedEncodingException e) {
-            System.out.println("Failed to create entity from " + json);
+            logger.info("Failed to create entity from " + json);
             e.printStackTrace();
         } catch (ClientProtocolException e1) {
-            System.out.println("Failed to connect to " +
+            logger.info("Failed to connect to " +
                     httpPost.getURI().toASCIIString());
             e1.printStackTrace();
         } catch (IOException e1) {
-            System.out.println("Failed to get setlist from " +
+            logger.info("Failed to get setlist from " +
                     httpPost.getURI().toASCIIString());
             e1.printStackTrace();
         }
@@ -2556,6 +2595,7 @@ public class Setlist implements UserStreamListener {
     }
     
     private boolean putSetlist(String objectId, String json) {
+    	logger.info("putSetlist: " + objectId + " : " + json);
     	HttpClient httpclient = HttpClientBuilder.create().build();
         HttpResponse response = null;
         HttpPut httpPut = new HttpPut("https://api.parse.com/1/classes/Setlist/"
@@ -2570,19 +2610,19 @@ public class Setlist implements UserStreamListener {
             httpPut.setEntity(reqEntity);
             response = httpclient.execute(httpPut);
             if (response.getStatusLine().getStatusCode() != 200) {
-                System.out.println("PUT to " + objectId + " failed!");
-                System.out.println(json);
+                logger.info("PUT to " + objectId + " failed!");
+                logger.info(json);
                 return false;
             }  
         } catch (UnsupportedEncodingException e) {
-            System.out.println("Failed to create entity from " + json);
+            logger.info("Failed to create entity from " + json);
             e.printStackTrace();
         } catch (ClientProtocolException e1) {
-            System.out.println("Failed to connect to " +
+            logger.info("Failed to connect to " +
                     httpPut.getURI().toASCIIString());
             e1.printStackTrace();
         } catch (IOException e1) {
-            System.out.println("Failed to get setlist from " +
+            logger.info("Failed to get setlist from " +
                     httpPut.getURI().toASCIIString());
             e1.printStackTrace();
         }
@@ -2606,20 +2646,20 @@ public class Setlist implements UserStreamListener {
             httpPut.setEntity(reqEntity);
             response = httpclient.execute(httpPut);
             if (response.getStatusLine().getStatusCode() != 200) {
-                System.out.println("Add play " + playId + " to " + setlistId +
+                logger.info("Add play " + playId + " to " + setlistId +
                 		" failed!");
-                System.out.println(json);
+                logger.info(json);
                 return false;
             }  
         } catch (UnsupportedEncodingException e) {
-            System.out.println("Failed to create entity from " + json);
+            logger.info("Failed to create entity from " + json);
             e.printStackTrace();
         } catch (ClientProtocolException e1) {
-            System.out.println("Failed to connect to " +
+            logger.info("Failed to connect to " +
                     httpPut.getURI().toASCIIString());
             e1.printStackTrace();
         } catch (IOException e1) {
-            System.out.println("Failed to get setlist from " +
+            logger.info("Failed to get setlist from " +
                     httpPut.getURI().toASCIIString());
             e1.printStackTrace();
         }
@@ -2627,7 +2667,7 @@ public class Setlist implements UserStreamListener {
     }
     
     private String getSong(String latestSong) {
-    	System.out.println("getSong: " + latestSong);
+    	logger.info("getSong: " + latestSong);
     	if (latestSong == null)
     		return null;
     	HttpClient httpclient = HttpClientBuilder.create().build();
@@ -2649,18 +2689,18 @@ public class Setlist implements UserStreamListener {
         try {
             response = httpclient.execute(httpGet);
             if (response.getStatusLine().getStatusCode() != 200) {
-                System.out.println("GET of " + latestSong + " failed!");
+                logger.info("GET of " + latestSong + " failed!");
                 return null;
             }
             entity = response.getEntity();
             if (entity != null)
                  responseString = EntityUtils.toString(response.getEntity());  
         } catch (ClientProtocolException e1) {
-            System.out.println("Failed to connect to " +
+            logger.info("Failed to connect to " +
                     httpGet.getURI().toASCIIString());
             e1.printStackTrace();
         } catch (IOException e1) {
-            System.out.println("Failed to get setlist from " +
+            logger.info("Failed to get setlist from " +
                     httpGet.getURI().toASCIIString());
             e1.printStackTrace();
         }
@@ -2693,27 +2733,27 @@ public class Setlist implements UserStreamListener {
         try {
             response = httpclient.execute(httpGet);
             if (response.getStatusLine().getStatusCode() != 200) {
-                System.out.println("GET of " + setlistId + " : " + slot +
+                logger.info("GET of " + setlistId + " : " + slot +
                 		" play failed!");
                 return true;
             }
             entity = response.getEntity();
             if (entity != null) {
                  responseString = EntityUtils.toString(response.getEntity());
-                 System.out.println("getPlay responseString: " +
+                 logger.info("getPlay responseString: " +
                 		 responseString);
                  int tempSlot = getLargestSlotFromResponse(responseString);
-                 System.out.println("getPlay slot: " + slot);
-                 System.out.println("getPlay tempSlot: " + tempSlot);
+                 logger.info("getPlay slot: " + slot);
+                 logger.info("getPlay tempSlot: " + tempSlot);
                  if (slot > tempSlot)
                 	 return false;
             }
         } catch (ClientProtocolException e1) {
-            System.out.println("Failed to connect to " +
+            logger.info("Failed to connect to " +
                     httpGet.getURI().toASCIIString());
             e1.printStackTrace();
         } catch (IOException e1) {
-            System.out.println("Failed to get setlist from " +
+            logger.info("Failed to get setlist from " +
                     httpGet.getURI().toASCIIString());
             e1.printStackTrace();
         }
@@ -2734,19 +2774,19 @@ public class Setlist implements UserStreamListener {
             httpPost.setEntity(reqEntity);
             response = httpclient.execute(httpPost);
             if (response.getStatusLine().getStatusCode() != 200) {
-                System.out.println("POST of notification failed!");
-                System.out.println(json);
+                logger.info("POST of notification failed!");
+                logger.info(json);
                 return false;
             }
         } catch (UnsupportedEncodingException e) {
-            System.out.println("Failed to create entity from " + json);
+            logger.info("Failed to create entity from " + json);
             e.printStackTrace();
         } catch (ClientProtocolException e1) {
-            System.out.println("Failed to connect to " +
+            logger.info("Failed to connect to " +
                     httpPost.getURI().toASCIIString());
             e1.printStackTrace();
         } catch (IOException e1) {
-            System.out.println("Failed to get setlist from " +
+            logger.info("Failed to get setlist from " +
                     httpPost.getURI().toASCIIString());
             e1.printStackTrace();
         }
@@ -2769,8 +2809,8 @@ public class Setlist implements UserStreamListener {
             httpPost.setEntity(reqEntity);
             response = httpclient.execute(httpPost);
             if (response.getStatusLine().getStatusCode() != 201) {
-                System.out.println("POST of song failed!");
-                System.out.println(json);
+                logger.info("POST of song failed!");
+                logger.info(json);
             }
             else {
             	HttpEntity entity = response.getEntity();
@@ -2781,14 +2821,14 @@ public class Setlist implements UserStreamListener {
 	            }
             }
         } catch (UnsupportedEncodingException e) {
-            System.out.println("Failed to create entity from " + json);
+            logger.info("Failed to create entity from " + json);
             e.printStackTrace();
         } catch (ClientProtocolException e1) {
-            System.out.println("Failed to connect to " +
+            logger.info("Failed to connect to " +
                     httpPost.getURI().toASCIIString());
             e1.printStackTrace();
         } catch (IOException e1) {
-            System.out.println("Failed to get setlist from " +
+            logger.info("Failed to get setlist from " +
                     httpPost.getURI().toASCIIString());
             e1.printStackTrace();
         }
@@ -2798,7 +2838,7 @@ public class Setlist implements UserStreamListener {
     private boolean putSong(String objectId, String json) {
     	HttpClient httpclient = HttpClientBuilder.create().build();
         HttpResponse response = null;
-        System.out.println(objectId);
+        logger.info(objectId);
         HttpPut httpPut = new HttpPut("https://api.parse.com/1/classes/Song/" +
         		objectId);
         httpPut.addHeader("X-Parse-Application-Id",
@@ -2811,19 +2851,19 @@ public class Setlist implements UserStreamListener {
             httpPut.setEntity(reqEntity);
             response = httpclient.execute(httpPut);
             if (response.getStatusLine().getStatusCode() != 200) {
-                System.out.println("PUT to " + objectId + " failed!");
-                System.out.println(json);
+                logger.info("PUT to " + objectId + " failed!");
+                logger.info(json);
                 return false;
             }  
         } catch (UnsupportedEncodingException e) {
-            System.out.println("Failed to create entity from " + json);
+            logger.info("Failed to create entity from " + json);
             e.printStackTrace();
         } catch (ClientProtocolException e1) {
-            System.out.println("Failed to connect to " +
+            logger.info("Failed to connect to " +
                     httpPut.getURI().toASCIIString());
             e1.printStackTrace();
         } catch (IOException e1) {
-            System.out.println("Failed to get setlist from " +
+            logger.info("Failed to get setlist from " +
                     httpPut.getURI().toASCIIString());
             e1.printStackTrace();
         }
@@ -2846,8 +2886,8 @@ public class Setlist implements UserStreamListener {
             httpPost.setEntity(reqEntity);
             response = httpclient.execute(httpPost);
             if (response.getStatusLine().getStatusCode() != 201) {
-                System.out.println("POST of song failed!");
-                System.out.println(json);
+                logger.info("POST of song failed!");
+                logger.info(json);
             }
             else {
             	HttpEntity entity = response.getEntity();
@@ -2858,14 +2898,14 @@ public class Setlist implements UserStreamListener {
 	            }
             }
         } catch (UnsupportedEncodingException e) {
-            System.out.println("Failed to create entity from " + json);
+            logger.info("Failed to create entity from " + json);
             e.printStackTrace();
         } catch (ClientProtocolException e1) {
-            System.out.println("Failed to connect to " +
+            logger.info("Failed to connect to " +
                     httpPost.getURI().toASCIIString());
             e1.printStackTrace();
         } catch (IOException e1) {
-            System.out.println("Failed to get setlist from " +
+            logger.info("Failed to get setlist from " +
                     httpPost.getURI().toASCIIString());
             e1.printStackTrace();
         }
@@ -2887,19 +2927,19 @@ public class Setlist implements UserStreamListener {
             httpPut.setEntity(reqEntity);
             response = httpclient.execute(httpPut);
             if (response.getStatusLine().getStatusCode() != 200) {
-                System.out.println("PUT to " + objectId + " failed!");
-                System.out.println(json);
+                logger.info("PUT to " + objectId + " failed!");
+                logger.info(json);
                 return false;
             }  
         } catch (UnsupportedEncodingException e) {
-            System.out.println("Failed to create entity from " + json);
+            logger.info("Failed to create entity from " + json);
             e.printStackTrace();
         } catch (ClientProtocolException e1) {
-            System.out.println("Failed to connect to " +
+            logger.info("Failed to connect to " +
                     httpPut.getURI().toASCIIString());
             e1.printStackTrace();
         } catch (IOException e1) {
-            System.out.println("Failed to get setlist from " +
+            logger.info("Failed to get setlist from " +
                     httpPut.getURI().toASCIIString());
             e1.printStackTrace();
         }
@@ -2921,34 +2961,41 @@ public class Setlist implements UserStreamListener {
             httpPut.setEntity(reqEntity);
             response = httpclient.execute(httpPut);
             if (response.getStatusLine().getStatusCode() != 200) {
-                System.out.println("PUT to " + objectId + " failed!");
-                System.out.println(json);
+                logger.info("PUT to " + objectId + " failed!");
+                logger.info(json);
                 return false;
             }  
         } catch (UnsupportedEncodingException e) {
-            System.out.println("Failed to create entity from " + json);
+            logger.info("Failed to create entity from " + json);
             e.printStackTrace();
         } catch (ClientProtocolException e1) {
-            System.out.println("Failed to connect to " +
+            logger.info("Failed to connect to " +
                     httpPut.getURI().toASCIIString());
             e1.printStackTrace();
         } catch (IOException e1) {
-            System.out.println("Failed to get setlist from " +
+            logger.info("Failed to get setlist from " +
                     httpPut.getURI().toASCIIString());
             e1.printStackTrace();
         }
         return true;
     }
     
-    private String getSetlistJsonString(String latestSetlist) {
+    private String getSetlistJsonString(String latestSetlist, String venueId) {
         currDateString = getNewSetlistDateString(latestSetlist);
         JsonNodeFactory factory = JsonNodeFactory.instance;
         ObjectNode rootNode = factory.objectNode();
         ObjectNode dateNode = factory.objectNode();
         dateNode.put("__type", "Date");
         dateNode.put("iso", currDateString);
+        ObjectNode venueNode = factory.objectNode();
+        venueNode.put("__type", "Pointer");
+        venueNode.put("className", "Venue");
+        venueNode.put("objectId", venueId);
         rootNode.put("set", latestSetlist);
         rootNode.put("setDate", dateNode);
+        if (venueId != null) {
+        	rootNode.put("venue", venueNode);
+        }
         return rootNode.toString();
     }
     
@@ -2974,6 +3021,8 @@ public class Setlist implements UserStreamListener {
         dataNode.put("song", latestSong);
         dataNode.put("setlist", setlist);
         dataNode.put("shortDate", getShortSetlistString(locList.get(0)));
+        dataNode.put("venueName", getVenueName());
+        dataNode.put("venueCity", getVenueCity());
         dataNode.put("timestamp", Long.toString(System.currentTimeMillis()));
         rootNode.put("where", whereNode);
         rootNode.put("expiration_time", expireDateString);
@@ -3072,10 +3121,10 @@ public class Setlist implements UserStreamListener {
             }
             jp.close(); // ensure resources get cleaned up timely and properly
         } catch (JsonParseException e) {
-            System.out.println("Failed to parse " + responseString);
+            logger.info("Failed to parse " + responseString);
             e.printStackTrace();
         } catch (IOException e) {
-            System.out.println("Failed to parse " + responseString);
+            logger.info("Failed to parse " + responseString);
             e.printStackTrace();
         }
         return count;
@@ -3114,56 +3163,172 @@ public class Setlist implements UserStreamListener {
             }
             jp.close(); // ensure resources get cleaned up timely and properly
         } catch (JsonParseException e) {
-            System.out.println("Failed to parse " + responseString);
+            logger.info("Failed to parse " + responseString);
             e.printStackTrace();
         } catch (IOException e) {
-            System.out.println("Failed to parse " + responseString);
+            logger.info("Failed to parse " + responseString);
             e.printStackTrace();
         }
         return questionMap;
     }
     */
-    private String getObjectIdFromResponse(String responseString) {
+    private String getVenueIdFromResponse(String responseString) {
+    	logger.info("getVenueIdFromResponse: " + responseString);
+    	if (responseString == null) {
+    		return null;
+    	}
+		JsonFactory f = new JsonFactory();
+		JsonParser jp;
+		String fieldName;
+		String venue = null;
+		try {
+		    jp = f.createJsonParser(responseString);
+		    JsonToken token;
+			if (jp.nextToken() == JsonToken.START_OBJECT) {
+				if (jp.nextToken() == JsonToken.FIELD_NAME &&
+						"results".equals(jp.getCurrentName())) {
+					if (jp.nextToken() == JsonToken.START_ARRAY) {
+						while ((token = jp.nextToken()) !=
+								JsonToken.END_ARRAY) {
+							if (token == JsonToken.FIELD_NAME) {
+								fieldName = jp.getCurrentName();
+								if ("venue".equals(fieldName)) {
+									while ((token = jp.nextToken()) !=
+											JsonToken.END_OBJECT) {
+										if (token == JsonToken.FIELD_NAME &&
+												jp.getCurrentName().equals("objectId")) {
+											jp.nextToken();
+											venue = jp.getText();
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		    jp.close(); // ensure resources get cleaned up timely and properly
+		} catch (JsonParseException e) {
+		    logger.info("Failed to parse " + responseString);
+		    e.printStackTrace();
+		} catch (IOException e) {
+		    logger.info("Failed to parse " + responseString);
+		    e.printStackTrace();
+		}
+		return venue;
+	}
+    
+    private static String getVenueIdFromVenue(String responseString) {
+    	logger.info("getVenueIdFromVenue: " + responseString);
+    	if (responseString == null) {
+    		return null;
+    	}
+		JsonFactory f = new JsonFactory();
+		JsonParser jp;
+		String fieldName;
+		String venue = null;
+		try {
+		    jp = f.createJsonParser(responseString);
+		    JsonToken token;
+			if (jp.nextToken() == JsonToken.START_OBJECT) {
+				while ((token = jp.nextToken()) !=
+						JsonToken.END_OBJECT) {
+					if (token == JsonToken.FIELD_NAME) {
+						fieldName = jp.getCurrentName();
+						if ("objectId".equals(fieldName)) {
+							jp.nextToken();
+							venue = jp.getText();
+							break;
+						}
+					}
+				}
+			}
+		    jp.close(); // ensure resources get cleaned up timely and properly
+		} catch (JsonParseException e) {
+		    logger.info("Failed to parse " + responseString);
+		    e.printStackTrace();
+		} catch (IOException e) {
+		    logger.info("Failed to parse " + responseString);
+		    e.printStackTrace();
+		}
+		return venue;
+	}
+    
+    private void getVenueFromResponse(String response) {
+    	if (response == null) {
+    		return;
+    	}
+		JsonFactory f = new JsonFactory();
+		JsonParser jp;
+		String fieldName;
+		String venue = null;
+		try {
+		    jp = f.createJsonParser(response);
+		    JsonToken token;
+			if (jp.nextToken() == JsonToken.START_OBJECT) {
+				while ((token = jp.nextToken()) !=
+						JsonToken.END_OBJECT) {
+					if (token == JsonToken.FIELD_NAME) {
+						fieldName = jp.getCurrentName();
+						if ("name".equals(fieldName)) {
+							jp.nextToken();
+							setVenueName(jp.getText());
+						}
+						else if ("city".equals(fieldName)) {
+							jp.nextToken();
+							setVenueCity(jp.getText());
+						}
+					}
+				}
+			}
+		    jp.close(); // ensure resources get cleaned up timely and properly
+		} catch (JsonParseException e) {
+		    logger.info("Failed to parse " + response);
+		    e.printStackTrace();
+		} catch (IOException e) {
+		    logger.info("Failed to parse " + response);
+		    e.printStackTrace();
+		}
+    }
+    
+    public String getObjectIdFromResponse(String responseString) {
         JsonFactory f = new JsonFactory();
         JsonParser jp;
         String fieldname;
         String objectId = null;
+        JsonToken token;
+        boolean insideObject = false;
         try {
             jp = f.createJsonParser(responseString);
-            jp.nextToken();
-            jp.nextToken();
+            token = jp.nextToken();
+            token = jp.nextToken();
             fieldname = jp.getCurrentName();
             if ("results".equals(fieldname)) { // contains an object
-                jp.nextToken();
-                while (jp.nextToken() != null) {
-                    jp.nextToken();
-                    fieldname = jp.getCurrentName();
-                    if ("set".equals(fieldname)) {
-                        jp.nextToken();
-                        jp.getText(); // setlist
-                    }
-                    else if ("setDate".equals(fieldname)) {
-                        jp.nextToken();
-                        jp.nextToken();
-                        jp.nextToken();
-                        jp.nextToken();
-                        jp.getText(); // date string
-                    }
-                    else if ("title".equals(fieldname)) {
-                    	jp.nextToken();
-                    	jp.getText(); // song title
-                    }
-                    else if ("objectId".equals(fieldname)) {
-                        objectId = jp.getText();
-                    }
+            	token = jp.nextToken();
+            	token = jp.nextToken();
+                while ((token = jp.nextToken()) != null) {
+                	if (token == JsonToken.START_OBJECT) {
+                		insideObject = true;
+                	}
+                	else if (token == JsonToken.END_OBJECT) {
+                		insideObject = false;
+                	}
+                	if (token == JsonToken.FIELD_NAME) {
+	                    fieldname = jp.getCurrentName();
+	                    if ("objectId".equals(fieldname) && !insideObject) {
+	                    	token = jp.nextToken();
+	                        objectId = jp.getText();
+	                        break;
+	                    }
+                	}
                 }
             }
             jp.close(); // ensure resources get cleaned up timely and properly
         } catch (JsonParseException e) {
-            System.out.println("Failed to parse " + responseString);
+            logger.info("Failed to parse " + responseString);
             e.printStackTrace();
         } catch (IOException e) {
-            System.out.println("Failed to parse " + responseString);
+            logger.info("Failed to parse " + responseString);
             e.printStackTrace();
         }
         return objectId;
@@ -3194,10 +3359,10 @@ public class Setlist implements UserStreamListener {
             }
             jp.close(); // ensure resources get cleaned up timely and properly
         } catch (JsonParseException e) {
-            System.out.println("Failed to parse " + responseString);
+            logger.info("Failed to parse " + responseString);
             e.printStackTrace();
         } catch (IOException e) {
-            System.out.println("Failed to parse " + responseString);
+            logger.info("Failed to parse " + responseString);
             e.printStackTrace();
         }
         return objectId;
@@ -3221,10 +3386,10 @@ public class Setlist implements UserStreamListener {
             }
             jp.close(); // ensure resources get cleaned up timely and properly
         } catch (JsonParseException e) {
-            System.out.println("Failed to parse " + createString);
+            logger.info("Failed to parse " + createString);
             e.printStackTrace();
         } catch (IOException e) {
-            System.out.println("Failed to parse " + createString);
+            logger.info("Failed to parse " + createString);
             e.printStackTrace();
         }
         return objectId;
@@ -3247,19 +3412,19 @@ public class Setlist implements UserStreamListener {
                     jp.nextToken();
                     fieldname = jp.getCurrentName();
                     if ("slot".equals(fieldname)) {
-                    	System.out.println("slot fieldname");
+                    	logger.info("slot fieldname");
                         tempSlot = jp.getIntValue();
-                        System.out.println("tempSlot: " + tempSlot);
+                        logger.info("tempSlot: " + tempSlot);
                         slot = tempSlot > slot ? tempSlot : slot;
                     }
                 }
             }
             jp.close(); // ensure resources get cleaned up timely and properly
         } catch (JsonParseException e) {
-            System.out.println("Failed to parse " + responseString);
+            logger.info("Failed to parse " + responseString);
             e.printStackTrace();
         } catch (IOException e) {
-            System.out.println("Failed to parse " + responseString);
+            logger.info("Failed to parse " + responseString);
             e.printStackTrace();
         }
         return slot;
@@ -3292,26 +3457,171 @@ public class Setlist implements UserStreamListener {
             }
             jp.close(); // ensure resources get cleaned up timely and properly
         } catch (JsonParseException e) {
-            System.out.println("Failed to parse " + responseString);
+            logger.info("Failed to parse " + responseString);
             e.printStackTrace();
         } catch (IOException e) {
-            System.out.println("Failed to parse " + responseString);
+            logger.info("Failed to parse " + responseString);
             e.printStackTrace();
         }
         return objectId;
     }
     
+    private String getVenueJson() {
+    	String venueName = locList.get(2);
+		String venueCity = locList.get(3);
+		JsonNodeFactory jsonNodeFactory = JsonNodeFactory.instance;
+		ObjectNode rootNode = jsonNodeFactory.objectNode();
+		rootNode.put("name", venueName);
+		rootNode.put("city", venueCity);
+		return rootNode.toString();
+    }
+    
+    private static String getResponse(String className, String objectId) {
+    	HttpClient httpclient = HttpClientBuilder.create().build();
+        HttpEntity entity = null;
+        HttpResponse response = null;
+        String responseString = null;
+        StringBuilder sb = new StringBuilder();
+        sb.append("https://api.parse.com/1/classes/");
+        sb.append(className);
+        sb.append("/");
+        sb.append(objectId);
+        String url = sb.toString();
+        HttpGet httpGet = new HttpGet(url);
+        httpGet.addHeader("X-Parse-Application-Id",
+        		"ImI8mt1EM3NhZNRqYZOyQpNSwlfsswW73mHsZV3R");
+        httpGet.addHeader("X-Parse-REST-API-Key",
+        		"1smRSlfAvbFg4AsDxat1yZ3xknHQbyhzZ4msAi5w");
+        try {
+            response = httpclient.execute(httpGet);
+            if (response.getStatusLine().getStatusCode() != 200) {
+            	logger.info("GET to " + className + " failed!");
+                return null;
+            }
+            entity = response.getEntity();
+            if (entity != null) {
+                 return EntityUtils.toString(response.getEntity());
+            }
+        } catch (ClientProtocolException e1) {
+            logger.info("Failed to connect to " +
+                    httpGet.getURI().toASCIIString());
+            e1.printStackTrace();
+        } catch (IOException e1) {
+            logger.info("Failed to get setlist from " +
+                    httpGet.getURI().toASCIIString());
+            e1.printStackTrace();
+        }
+        return null;
+    }
+    
+    private static String getResponse(String className, int limit,
+    		String where) {
+    	HttpClient httpclient = HttpClientBuilder.create().build();
+        HttpEntity entity = null;
+        HttpResponse response = null;
+        String responseString = null;
+        StringBuilder sb = new StringBuilder();
+        sb.append("https://api.parse.com/1/classes/");
+        sb.append(className);
+        sb.append("?limit=");
+        sb.append(Integer.toString(limit));
+        sb.append("&order=setDate");
+        if (where != null) {
+        	sb.append("&where=");
+        	try {
+				sb.append(URLEncoder.encode(where, "UTF-8").replace("+", "%20")
+						.replace("-", "%2D"));
+			} catch (UnsupportedEncodingException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+				return null;
+			}
+        }
+        String url = sb.toString();
+        HttpGet httpGet = new HttpGet(url);
+        httpGet.addHeader("X-Parse-Application-Id",
+        		"ImI8mt1EM3NhZNRqYZOyQpNSwlfsswW73mHsZV3R");
+        httpGet.addHeader("X-Parse-REST-API-Key",
+        		"1smRSlfAvbFg4AsDxat1yZ3xknHQbyhzZ4msAi5w");
+        try {
+            response = httpclient.execute(httpGet);
+            if (response.getStatusLine().getStatusCode() != 200) {
+            	logger.info("GET to " + className + " failed!");
+                return null;
+            }
+            entity = response.getEntity();
+            if (entity != null) {
+                 return EntityUtils.toString(response.getEntity());
+            }
+        } catch (ClientProtocolException e1) {
+            logger.info("Failed to connect to " +
+                    httpGet.getURI().toASCIIString());
+            e1.printStackTrace();
+        } catch (IOException e1) {
+            logger.info("Failed to get setlist from " +
+                    httpGet.getURI().toASCIIString());
+            e1.printStackTrace();
+        }
+        return null;
+    }
+    
+    private static String postObject(String className, String postString) {
+    	HttpClient httpclient = HttpClientBuilder.create().build();
+    	HttpEntity entity = null;
+        HttpResponse response = null;
+        StringBuilder sb = new StringBuilder();
+        sb.append("https://api.parse.com/1/classes/");
+        sb.append(className);
+        String url = sb.toString();
+        HttpPost httpPost = new HttpPost(url);
+        httpPost.addHeader("X-Parse-Application-Id",
+        		"ImI8mt1EM3NhZNRqYZOyQpNSwlfsswW73mHsZV3R");
+        httpPost.addHeader("X-Parse-REST-API-Key",
+        		"1smRSlfAvbFg4AsDxat1yZ3xknHQbyhzZ4msAi5w");
+        httpPost.setEntity(new StringEntity(postString,
+        		ContentType.APPLICATION_JSON));
+        try {
+            response = httpclient.execute(httpPost);
+            if (response.getStatusLine().getStatusCode() != 201) {
+                logger.info("POST to " + className + " failed!");
+            }
+            else {
+            	entity = response.getEntity();
+                if (entity != null) {
+                     return EntityUtils.toString(entity);
+                }
+            }
+        } catch (ClientProtocolException e1) {
+            logger.info("Failed to connect to " +
+            		httpPost.getURI().toASCIIString());
+            e1.printStackTrace();
+        } catch (IOException e1) {
+            logger.info("Failed to get setlist from " +
+            		httpPost.getURI().toASCIIString());
+            e1.printStackTrace();
+        }
+        return null;
+    }
+    
     private int uploadLatest(String latestSetlist) {
         String getResponse = getSetlist(latestSetlist);
         if (getResponse == null) {
-            System.out.println("Fetch setlist from Parse failed!");
-            System.out.println(latestSetlist);
+            logger.info("Fetch setlist from Parse failed!");
+            logger.info(latestSetlist);
             return -1;
         }
+        String venueJson = getVenueJson();
         String objectId = getObjectIdFromResponse(getResponse);
         if (objectId == null) {
-        	if (!isDev)
-        		postSetlist(getSetlistJsonString(latestSetlist));
+        	String venueId = getVenueIdFromVenue(getResponse("Venue", 1,
+        			venueJson));
+        	if (venueId == null) {
+				venueId = getVenueIdFromVenue(postObject("Venue",
+						venueJson));
+        	}
+        	if (!isDev) {
+        		postSetlist(getSetlistJsonString(latestSetlist, venueId));
+        	}
             File dir = new File("/home/");
             String[] files = dir.list(new FilenameFilter() {
             	public boolean accept(File dir, String filename) {
@@ -3324,21 +3634,35 @@ public class Setlist implements UserStreamListener {
             	if (files[i].startsWith("setlist")) {
             		if (convertStringToDate(DATE_FORMAT,
             				files[i].substring(7)).after(newDate)) {
-            			System.out.println("older setlist file found!");
+            			logger.info("newer setlist file found!");
             			return 1;
             		}
             	}
             }
+            setVenueId(venueId);
             return 0;
         }
         else {
-            putSetlist(objectId, getSetlistJsonString(latestSetlist));
+        	String venueId = getVenueIdFromResponse(getResponse);
+        	logger.info("VenueId: " + venueId);
+        	if (venueId == null) {
+        		venueId = getVenueIdFromVenue(getResponse("Venue", 1,
+        				venueJson));
+        		logger.info("VenueId: " + venueId);
+        		if (venueId == null) {
+    				venueId = getVenueIdFromVenue(postObject("Venue",
+    						venueJson));
+    				logger.info("VenueId: " + venueId);
+            	}
+        	}
+            putSetlist(objectId, getSetlistJsonString(latestSetlist, venueId));
+            setVenueId(venueId);
             return -1;
         }
     }
     
     private String createLatest(String dateString) {
-    	System.out.println("createLatest: " + dateString);
+    	logger.info("createLatest: " + dateString);
     	if (dateString == null)
             return null;
         HttpClient httpclient = HttpClientBuilder.create().build();
@@ -3361,28 +3685,29 @@ public class Setlist implements UserStreamListener {
         try {
             response = httpclient.execute(httpGet);
             if (response.getStatusLine().getStatusCode() != 200) {
-                System.out.println("GET of " + dateString + " failed!");
+                logger.info("GET of " + dateString + " failed!");
                 return null;
             }
             entity = response.getEntity();
             if (entity != null)
                  responseString = EntityUtils.toString(response.getEntity());  
         } catch (ClientProtocolException e1) {
-            System.out.println("Failed to connect to " +
+            logger.info("Failed to connect to " +
                     httpGet.getURI().toASCIIString());
             e1.printStackTrace();
         } catch (IOException e1) {
-            System.out.println("Failed to get setlist from " +
+            logger.info("Failed to get setlist from " +
                     httpGet.getURI().toASCIIString());
             e1.printStackTrace();
         }
         if (responseString == null) {
-            System.out.println("Fetch setlist from Parse failed!");
-            System.out.println(dateString);
+            logger.info("Fetch setlist from Parse failed!");
+            logger.info(dateString);
         }
         String objectId = getObjectIdFromResponse(responseString);
-        if (objectId == null)
+        if (objectId == null) {
             objectId = postSetlist(getNewSetlistJsonString(dateString));
+        }
         return objectId;
     }
     
@@ -3427,7 +3752,7 @@ public class Setlist implements UserStreamListener {
         try {
             response = httpclient.execute(httpGet);
             if (response.getStatusLine().getStatusCode() != 200) {
-                System.out.println("GET of " + setlistId + " plays failed!");
+                logger.info("GET of " + setlistId + " plays failed!");
                 return;
             }
             entity = response.getEntity();
@@ -3438,11 +3763,11 @@ public class Setlist implements UserStreamListener {
                 	 return;
             }
         } catch (ClientProtocolException e1) {
-            System.out.println("Failed to connect to " +
+            logger.info("Failed to connect to " +
                     httpGet.getURI().toASCIIString());
             e1.printStackTrace();
         } catch (IOException e1) {
-            System.out.println("Failed to get setlist from " +
+            logger.info("Failed to get setlist from " +
                     httpGet.getURI().toASCIIString());
             e1.printStackTrace();
         }
@@ -3459,18 +3784,18 @@ public class Setlist implements UserStreamListener {
             httpPut.setEntity(reqEntity);
             response = httpclient.execute(httpPut);
             if (response.getStatusLine().getStatusCode() != 200) {
-                System.out.println("PUT to " + closerId + " failed!");
-                System.out.println(json);
+                logger.info("PUT to " + closerId + " failed!");
+                logger.info(json);
             }  
         } catch (UnsupportedEncodingException e) {
-            System.out.println("Failed to create entity from " + json);
+            logger.info("Failed to create entity from " + json);
             e.printStackTrace();
         } catch (ClientProtocolException e1) {
-            System.out.println("Failed to connect to " +
+            logger.info("Failed to connect to " +
                     httpPut.getURI().toASCIIString());
             e1.printStackTrace();
         } catch (IOException e1) {
-            System.out.println("Failed to get setlist from " +
+            logger.info("Failed to get setlist from " +
                     httpPut.getURI().toASCIIString());
             e1.printStackTrace();
         }
@@ -3482,8 +3807,8 @@ public class Setlist implements UserStreamListener {
     	// Check if song exists
         String getResponse = getSong(latestSong);
         if (getResponse == null) {
-            System.out.println("Fetch setlist from Parse failed!");
-            System.out.println(latestSong);
+            logger.info("Fetch setlist from Parse failed!");
+            logger.info(latestSong);
             return false;
         }
         // Get the song id
@@ -3509,10 +3834,10 @@ public class Setlist implements UserStreamListener {
             bufStream.flush();
             bufStream.close();
         } catch (FileNotFoundException e) {
-            System.out.println("File not found: " + filename);
+            logger.info("File not found: " + filename);
             e.printStackTrace();
         } catch (IOException e) {
-            System.out.println("BufferedOutputStream failed for: " + filename);
+            logger.info("BufferedOutputStream failed for: " + filename);
             e.printStackTrace();
         }
     }
@@ -3527,11 +3852,11 @@ public class Setlist implements UserStreamListener {
             bufStream.read(buffer);
             bufStream.close();
         } catch (FileNotFoundException e) {
-            System.out.println(filename + " not found!");
+            logger.info(filename + " not found!");
         } catch (IOException e) {
-            System.out.println(filename + " IO Exception!");
+            logger.info(filename + " IO Exception!");
         } catch (IllegalArgumentException e) {
-            System.out.println("File stream is <= 0");
+            logger.info("File stream is <= 0");
             return new byte[0];
         }
         return buffer;
@@ -3632,8 +3957,8 @@ public class Setlist implements UserStreamListener {
     
     public Status postTweet(String setlistMessage, String gameMessage,
     		File file, long replyTo, boolean postGame) {
-    	System.out.println("Tweet text: " + setlistMessage);
-    	System.out.println("Tweet length: " + setlistMessage.length());
+    	logger.info("Tweet text: " + setlistMessage);
+    	logger.info("Tweet length: " + setlistMessage.length());
     	Status status = updateStatus(setlistConfig, setlistMessage, file,
     			replyTo);
     	if (status == null) {
@@ -3672,7 +3997,7 @@ public class Setlist implements UserStreamListener {
 				status = twitter.updateStatus(statusUpdate);
 	    	} catch (TwitterException te) {
 	    		te.printStackTrace();
-	    		System.out.println("Failed to get timeline: " +
+	    		logger.info("Failed to get timeline: " +
 	    				te.getMessage());
 	    		try {
 					Thread.sleep(1000);
@@ -3698,9 +4023,9 @@ public class Setlist implements UserStreamListener {
         BufferedReader br = new BufferedReader(
         		new InputStreamReader(System.in));
         while (null == accessToken) {
-          System.out.println(
+          logger.info(
         		  "Open the following URL and grant access to your account:");
-          System.out.println(requestToken.getAuthorizationURL());
+          logger.info(requestToken.getAuthorizationURL());
           System.out.print(
         		  "Enter the PIN(if aviailable) or just hit enter.[PIN]:");
           String pin = null;
@@ -3718,14 +4043,14 @@ public class Setlist implements UserStreamListener {
              }
           } catch (TwitterException te) {
             if(401 == te.getStatusCode()){
-              System.out.println("Unable to get the access token.");
+              logger.info("Unable to get the access token.");
             }else{
               te.printStackTrace();
             }
           }
         }
-        System.out.println(accessToken.getToken());
-        System.out.println(accessToken.getTokenSecret());
+        logger.info(accessToken.getToken());
+        logger.info(accessToken.getTokenSecret());
     }
     
     private interface WatchStreamListener {
@@ -3743,10 +4068,10 @@ public class Setlist implements UserStreamListener {
     
     private static void watchTwitterStream(final String answer,
     		final String questionId) {
-    	System.out.println("watchTwitterStream");
+    	logger.info("watchTwitterStream");
     	winners.clear();
     	winners = new ArrayList<String>(0);
-    	System.out.println("ANSWER: " + answer);
+    	logger.info("ANSWER: " + answer);
     	currAnswer = answer;
     	questionWait = WAIT_FOR_QUESTION;
     	startTime = System.currentTimeMillis();
@@ -3807,23 +4132,23 @@ public class Setlist implements UserStreamListener {
 		@Override
 		public void onStatus(Status status) {
 			// Get the diff characters between the answer and the response
-			System.out.println("RAW RESPONSE: " + status.getText());
+			logger.info("RAW RESPONSE: " + status.getText());
 			response = status.getText().toLowerCase(
 					Locale.getDefault()).replace(isDev ?
 							DEV_ACCOUNT : PROD_ACCOUNT, "").
 					replaceAll("[.,'`\":;/?\\-!@#]", "").trim();
-			System.out.println("MASSAGED RESPONSE: " + response);
+			logger.info("MASSAGED RESPONSE: " + response);
 			tempAnswer = currAnswer.toLowerCase(Locale.getDefault()).
 					replaceAll("[.,'`\":;/?\\-!@#]", "").trim();
-			System.out.println("MASSAGED ANSWER: " + tempAnswer);
-			System.out.println("questionWait: " + questionWait);
-			System.out.println("WAIT_FOR_ANSWER: " + WAIT_FOR_ANSWER);
+			logger.info("MASSAGED ANSWER: " + tempAnswer);
+			logger.info("questionWait: " + questionWait);
+			logger.info("WAIT_FOR_ANSWER: " + WAIT_FOR_ANSWER);
 			if (checkAnswer(tempAnswer, response,
 					status.getUser().getScreenName()) &&
 					questionWait > WAIT_FOR_ANSWER)
 				questionWait = WAIT_FOR_ANSWER;
-			System.out.println("questionWait: " + questionWait);
-			System.out.println("time left: " + (System.currentTimeMillis() -
+			logger.info("questionWait: " + questionWait);
+			logger.info("time left: " + (System.currentTimeMillis() -
 					startTime));
 			checkedNameMap = false;
 			checkedAcronymMap = false;
@@ -3835,7 +4160,7 @@ public class Setlist implements UserStreamListener {
 					e.printStackTrace();
 				}
 				watchStreamListener.onCorrectUser(currAnswer, winners);
-				System.out.println("checking if asking a new question");
+				logger.info("checking if asking a new question");
 			    if (totalQuestions < reqQuestions) {
 			    	if (totalQuestions % LEADERS_EVERY == 0) {
 			    		screenshot = new TriviaScreenshot(SETLIST_JPG_FILENAME,
@@ -3995,7 +4320,7 @@ public class Setlist implements UserStreamListener {
     				Locale.getDefault()))) {
     			continue;
     		}
-    		System.out.println("Checking " + answer.getValue());
+    		logger.info("Checking " + answer.getValue());
     		isCorrect = false;
     		if (checkAnswer(lastSong, answer.getValue())) {
     			isCorrect = true;
@@ -4048,7 +4373,7 @@ public class Setlist implements UserStreamListener {
 	    			continue;
 	    		}
 	    		count++;
-	    		System.out.println("Setlist game tweet length: " + sb.length());
+	    		logger.info("Setlist game tweet length: " + sb.length());
 	    		if ((songMessage.length() + sb.length()-1 + 3 +
 	    				Integer.toString(count).length() + 4 + winner.length() +
 	    				2 + usersMap.get(winner).toString().length() + 1) >
@@ -4069,9 +4394,14 @@ public class Setlist implements UserStreamListener {
         }
     	answers.clear();
     	answers = new LinkedHashMap<String, String>();
-    	return (String) sb.toString().subSequence(0, 140);
+    	if (sb.length() > 140) {
+    		return (String) sb.toString().subSequence(0, 140);
+    	}
+    	else {
+    		return (String) sb.toString();
+    	}
     }
-    
+    /*
     private void watchTwitterStream() {
     	answers.clear();
     	answers = new LinkedHashMap<String, String>();
@@ -4080,32 +4410,34 @@ public class Setlist implements UserStreamListener {
 	    twitterStream.addListener(this);
 	    // sample() method internally creates a thread which manipulates TwitterStream and calls these adequate listener methods continuously.
 	    twitterStream.user();
-	    /*
-	    FilterQuery filterQuery = new FilterQuery();
-	    filterQuery.track(new String[]{"#hashtag"});
-	    twitterStream.filter(filterQuery);
-	    */
+	    //FilterQuery filterQuery = new FilterQuery();
+	    //filterQuery.track(new String[]{"#hashtag"});
+	    //twitterStream.filter(filterQuery);
     }
-    
+    */
     public void addAnswer(String userName, String message) {
     	answers.put(userName, massageResponse(message));
     }
     
-    private void processTweet(Status status) {
-		System.out.println("CURR TIME: " + new Date(System.currentTimeMillis()).toString());
-		System.out.println("TWEET TIME: " + status.getCreatedAt().toString());
-		System.out.println("RAW RESPONSE: " + status.getText());
+    public void processTweet(Status status) {
+    	logger.info("inSetlist: " + inSetlist);
+    	if (!inSetlist) {
+    		return;
+    	}
+		logger.info("CURR TIME: " + new Date(System.currentTimeMillis()).toString());
+		logger.info("TWEET TIME: " + status.getCreatedAt().toString());
+		logger.info("RAW RESPONSE: " + status.getText());
 		String userName = status.getUser().getScreenName();
 		String inReplyTo = status.getInReplyToScreenName();
-		System.out.println("user: " + userName);
-		System.out.println("inReplyTo: " + inReplyTo);
+		logger.info("user: " + userName);
+		logger.info("inReplyTo: " + inReplyTo);
 		for (UserMentionEntity mention : status.getUserMentionEntities()) {
-			System.out.println("mention: " + mention.getScreenName());
+			logger.info("mention: " + mention.getScreenName());
 		}
 
 		if (inReplyTo.equalsIgnoreCase(currAccount)) {
 			String massaged = massageResponse(status.getText());
-			System.out.println("Adding " + userName + " : " + massaged);
+			logger.info("Adding " + userName + " : " + massaged);
 			answers.put(userName, massaged);
 		}
 	}
@@ -4116,7 +4448,7 @@ public class Setlist implements UserStreamListener {
 		try {
 			twitter.sendDirectMessage(screenName, message);
 		} catch (TwitterException e) {
-			System.out.println("Unable to send direct message!");
+			logger.info("Unable to send direct message!");
 			e.printStackTrace();
 		}
 	}
@@ -4148,7 +4480,7 @@ public class Setlist implements UserStreamListener {
 					"Failed banning user!");
 		}
     }
-
+    /*
 	public void onDeletionNotice(StatusDeletionNotice arg0) {}
 	public void onScrubGeo(long arg0, long arg1) {}
 	public void onStallWarning(StallWarning arg0) {}
@@ -4157,7 +4489,7 @@ public class Setlist implements UserStreamListener {
 	public void onBlock(User arg0, User arg1) {}
 	public void onDeletionNotice(long arg0, long arg1) {}
 	public void onDirectMessage(DirectMessage dm) {
-		System.out.println("DM: " + dm.getSenderScreenName() + " : " + dm.getText());
+		logger.info("DM: " + dm.getSenderScreenName() + " : " + dm.getText());
 		if (dm.getSenderScreenName().equalsIgnoreCase("copperpot5") ||
 				dm.getSenderScreenName().equalsIgnoreCase("jeffthefate")) {
 			String massagedText = dm.getText().toLowerCase(Locale.getDefault()); 
@@ -4172,20 +4504,18 @@ public class Setlist implements UserStreamListener {
 			}
 			else if (massagedText.contains("final scores")) {
 				if (massagedText.contains("image")) {
-					postSetlistScoresImage(FINAL_SCORES, "Top Scores",
-							usersMap);
+					postSetlistScoresImage(FINAL_SCORES);
 				}
 				else {
-					postSetlistScoresText(FINAL_SCORES, usersMap);
+					postSetlistScoresText(FINAL_SCORES);
 				}
 			}
 			else if (massagedText.contains("current scores")) {
 				if (massagedText.contains("image")) {
-					postSetlistScoresImage(CURRENT_SCORES, "Top Scores",
-							usersMap);
+					postSetlistScoresImage(CURRENT_SCORES);
 				}
 				else {
-					postSetlistScoresText(CURRENT_SCORES, usersMap);
+					postSetlistScoresText(CURRENT_SCORES);
 				}
 			}
 		}
@@ -4203,41 +4533,39 @@ public class Setlist implements UserStreamListener {
 	public void onUserListUnsubscription(User arg0, User arg1, UserList arg2) {}
 	public void onUserListUpdate(User arg0, UserList arg1) {}
 	public void onUserProfileUpdate(User arg0) {}
-	
-	public void postSetlistScoresImage(String tweetMessage, String imageMessage,
-			HashMap<String, Integer> winnerMap) {
-		System.out.println("winnerMap size: " + winnerMap.size());
-		System.out.println(winnerMap);
-		if (!winnerMap.isEmpty()) {
-			GameComparator gameComparator = new GameComparator(winnerMap);
+	*/
+	public void postSetlistScoresImage(String tweetMessage) {
+		logger.info("winnerMap size: " + usersMap.size());
+		logger.info(usersMap);
+		if (!usersMap.isEmpty()) {
+			GameComparator gameComparator = new GameComparator(usersMap);
 		    TreeMap<String, Integer> sortedUsersMap =
 		    		new TreeMap<String, Integer>(gameComparator);
-			sortedUsersMap.putAll(winnerMap);
+			sortedUsersMap.putAll(usersMap);
 			ArrayList<String> banList = getBanList();
-			for (String user : winnerMap.keySet()) {
+			for (String user : usersMap.keySet()) {
 				if (banList.contains(user.toLowerCase(Locale.getDefault()))) {
 					sortedUsersMap.remove(user);
 				}
 			}
 			Screenshot gameScreenshot = new TriviaScreenshot(setlistJpgFilename,
-					fontFilename, imageMessage, sortedUsersMap, 30, 20,
+					fontFilename, "Top Scores", sortedUsersMap, 60, 30,
 					10, verticalOffset);
 			updateStatus(gameConfig, tweetMessage,
 					new File(gameScreenshot.getOutputFilename()), -1);
 		}
 	}
 	
-	public void postSetlistScoresText(String message,
-			HashMap<String, Integer> winnerMap) {
-		System.out.println("winnerMap size: " + winnerMap.size());
-		System.out.println(winnerMap);
-		if (!winnerMap.isEmpty()) {
-			GameComparator gameComparator = new GameComparator(winnerMap);
+	public void postSetlistScoresText(String message) {
+		logger.info("winnerMap size: " + usersMap.size());
+		logger.info(usersMap);
+		if (!usersMap.isEmpty()) {
+			GameComparator gameComparator = new GameComparator(usersMap);
 		    TreeMap<String, Integer> sortedUsersMap =
 		    		new TreeMap<String, Integer>(gameComparator);
-			sortedUsersMap.putAll(winnerMap);
+			sortedUsersMap.putAll(usersMap);
 			ArrayList<String> banList = getBanList();
-			for (String user : winnerMap.keySet()) {
+			for (String user : usersMap.keySet()) {
 				if (banList.contains(user.toLowerCase(Locale.getDefault()))) {
 					sortedUsersMap.remove(user);
 				}
@@ -4334,8 +4662,8 @@ public class Setlist implements UserStreamListener {
 	        if (base.get(a) < base.get(b)) {
 	            return 1;
 	        } else if (base.get(a) == base.get(b)) {
-	        	System.out.println(a + " : " + b);
-	        	System.out.println(a.compareToIgnoreCase(b));
+	        	logger.info(a + " : " + b);
+	        	logger.info(a.compareToIgnoreCase(b));
 	        	return a.compareToIgnoreCase(b);
 	        } else {
 	            return -1;

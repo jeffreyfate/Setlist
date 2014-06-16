@@ -33,8 +33,7 @@ public class SetlistTest extends TestCase {
 		  .setOAuthConsumerKey(DEV_KEY)
 		  .setOAuthConsumerSecret(DEV_SECRET)
 		  .setOAuthAccessToken(DEV_ACCESS_TOKEN)
-		  .setOAuthAccessTokenSecret(DEV_ACCESS_SECRET)
-		  .setUseSSL(true);
+		  .setOAuthAccessTokenSecret(DEV_ACCESS_SECRET);
 		return cb.build();
 	}
 	
@@ -105,9 +104,9 @@ public class SetlistTest extends TestCase {
 		setlist.postSetlistScoresImage("[Final Scores]", "Top Scores",
 				winnerMap);
 	}
-	*/
+	
 	public void testBanList() {
-		Setlist setlist = new Setlist("", 0, true, setupDevConfig(),
+		Setlist setlist = new Setlist("", true, setupDevConfig(),
 				setupDevConfig(), "D:\\setlist.jpg", "D:\\roboto.ttf", 21, 70,
 				"", "", "", "D:\\banlist.ser", null, null, "");
 		setlist.addAnswer("jeffthefate", "JTR");
@@ -121,5 +120,13 @@ public class SetlistTest extends TestCase {
 		setlist.addAnswer("Copperpot5", "JTR");
 		System.out.println(setlist.findWinners("jtr", "Current Song [JTR]"));
 	}
-
+	*/
+	public void testObjectIdFromResponse() {
+		Setlist setlist = new Setlist("", true, setupDevConfig(),
+				setupDevConfig(), "D:\\setlist.jpg", "D:\\roboto.ttf", 21, 70,
+				"", "", "", "D:\\banlist.ser", null, null, "");
+		String objectId = setlist.getObjectIdFromResponse("{\"results\":[{\"set\":\"Jun 14 2014\\nDave Matthews Band\\nSusquehanna Bank Center\\nCamden, NJ\\n\\nShow begins @ 7:00 pm EDT\",\"setDate\":{\"__type\":\"Date\",\"iso\":\"2014-06-14T00:00:00.000Z\"},\"venue\":{\"__type\":\"Pointer\",\"className\":\"Venue\",\"objectId\":\"sRnwmhzwPP\"},\"plays\":{\"__type\":\"Relation\",\"className\":\"Play\"},\"createdAt\":\"2014-06-14T22:30:31.951Z\",\"updatedAt\":\"2014-06-14T22:30:31.951Z\",\"objectId\":\"UCnjunxzHy\"}]}");
+		System.out.println(objectId);
+	}
+	
 }
