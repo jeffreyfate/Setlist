@@ -1,19 +1,8 @@
 package com.jeffthefate.setlist;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-
-import org.apache.commons.lang3.StringUtils;
-
+import junit.framework.TestCase;
 import twitter4j.conf.Configuration;
 import twitter4j.conf.ConfigurationBuilder;
-
-import junit.framework.Test;
-import junit.framework.TestCase;
-import junit.framework.TestSuite;
 
 public class SetlistTest extends TestCase {
 	
@@ -23,10 +12,6 @@ public class SetlistTest extends TestCase {
 	private static final String DEV_ACCESS_SECRET = "XqxxE4qLUK3wJ4LHlIbcSP1m6G4spZVmCDdu5RLuU";
 	private static final String DEV_ACCOUNT = "dmbtriviatest";
 	
-	public SetlistTest(String testName) {
-		super(testName);
-	}
-	
 	private Configuration setupDevConfig() {
 		ConfigurationBuilder cb = new ConfigurationBuilder();
 		cb.setDebugEnabled(true)
@@ -35,10 +20,6 @@ public class SetlistTest extends TestCase {
 		  .setOAuthAccessToken(DEV_ACCESS_TOKEN)
 		  .setOAuthAccessTokenSecret(DEV_ACCESS_SECRET);
 		return cb.build();
-	}
-	
-	public static Test suite() {
-		return new TestSuite(SetlistTest.class);
 	}
 	/*
 	public void testUpdateStatus() {

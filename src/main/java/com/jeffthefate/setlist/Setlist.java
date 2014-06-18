@@ -9,40 +9,9 @@ package com.jeffthefate.setlist;
  * under doc/one-jar-license.txt
  */
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.FilenameFilter;
-import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.io.UnsupportedEncodingException;
-import java.net.URLEncoder;
-import java.nio.ByteBuffer;
-import java.nio.CharBuffer;
-import java.nio.charset.CharacterCodingException;
-import java.nio.charset.Charset;
-import java.nio.charset.CharsetDecoder;
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.Comparator;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.TimeZone;
-import java.util.TreeMap;
-
-import javax.net.ssl.SSLContext;
-
+import com.jeffthefate.Screenshot;
+import com.jeffthefate.SetlistScreenshot;
+import com.jeffthefate.TriviaScreenshot;
 import org.apache.commons.lang3.StringEscapeUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpEntity;
@@ -76,24 +45,24 @@ import org.codehaus.jackson.node.ArrayNode;
 import org.codehaus.jackson.node.JsonNodeFactory;
 import org.codehaus.jackson.node.ObjectNode;
 import org.jsoup.Jsoup;
-import org.jsoup.nodes.Comment;
-import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
-import org.jsoup.nodes.Node;
-import org.jsoup.nodes.TextNode;
+import org.jsoup.nodes.*;
 import org.jsoup.select.Elements;
-
-import twitter4j.Status;
-import twitter4j.StatusUpdate;
-import twitter4j.Twitter;
-import twitter4j.TwitterException;
-import twitter4j.TwitterFactory;
-import twitter4j.UserMentionEntity;
+import twitter4j.*;
 import twitter4j.conf.Configuration;
 
-import com.jeffthefate.Screenshot;
-import com.jeffthefate.SetlistScreenshot;
-import com.jeffthefate.TriviaScreenshot;
+import javax.net.ssl.SSLContext;
+import java.io.*;
+import java.net.URLEncoder;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetDecoder;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.*;
+import java.util.Map.Entry;
+import java.util.TimeZone;
 
 public class Setlist /*implements UserStreamListener*/ {
 
@@ -109,9 +78,6 @@ public class Setlist /*implements UserStreamListener*/ {
     private static boolean hasSegue = false;
     private static boolean firstBreak = false;
     private static boolean secondBreak = false;
-    
-    private static Calendar cal;
-    private static long endTime = -1;
     
     private static String setlistText = "";
     
@@ -199,14 +165,16 @@ public class Setlist /*implements UserStreamListener*/ {
     
     public void startSetlist() {
     	logger.info("Starting setlist...");
-    	//watchTwitterStream();
-    	endTime = System.currentTimeMillis() + duration;
+    	long endTime = System.currentTimeMillis() + duration;
     	inSetlist = true;
     	do {
     		runSetlistCheck(url);
     		try {
 				Thread.sleep(10000);
-			} catch (InterruptedException e) {}
+			} catch (InterruptedException e) {
+                logger.error("Setlist check wait interrupted!");
+                e.printStackTrace();
+            }
     	} while (endTime >= System.currentTimeMillis() && !kill);
     	logger.debug("duration: " + duration);
     	if (duration > 0) {
@@ -217,8 +185,6 @@ public class Setlist /*implements UserStreamListener*/ {
     		postSetlistScoresImage(FINAL_SCORES);
     	}
     	inSetlist = false;
-    	//twitterStream.cleanUp();
-    	//twitterStream.shutdown();
     }
     
     private void setVenueId(String venueId) {
@@ -288,15 +254,11 @@ public class Setlist /*implements UserStreamListener*/ {
     }
     
     public void runSetlistCheck(String url) {
-    	cal = Calendar.getInstance(TimeZone.getDefault());
+    	Calendar cal = Calendar.getInstance(TimeZone.getDefault());
         cal.setTimeInMillis(System.currentTimeMillis());
         logger.info(cal.getTime().toString());
         logger.info(Charset.defaultCharset().displayName());
-        /*
-        postNotification(getPushJsonString("Show begins @ 8:05 pm EDT", "Jun 16 2013\nDave Matthews Band\nComcast Center\nMansfield, MA\n\nShow begins @ 8:05 pm EDT\n",
-                getExpireDateString()));
-        */
-        String html = null;
+        String html;
         if (url != null) {
         	html = liveSetlist(url);
         }
@@ -395,7 +357,6 @@ public class Setlist /*implements UserStreamListener*/ {
         }
         setlistText = sb.toString();
         logger.info(setlistText);
-        // createScreenshot(setlistText);
         String setlistFile = setlistFilename +
                 (currDateString.replace('/', '_')) + ".txt";
         String lastSongFile = lastSongFilename +
@@ -415,11 +376,6 @@ public class Setlist /*implements UserStreamListener*/ {
             // 1 if there is a newer date available already
             int newDate = uploadLatest(setlistText);
             getVenueFromResponse(getResponse("Venue", getVenueId()));
-            /*
-            if (getLatestDate().after(convertStringToDate(DATE_FORMAT,
-            		currDateString)))
-            	return;
-            	*/
             String lastSongFromFile = readStringFromFile(lastSongFile);
             if (newDate == 0 || (newDate == -1 &&
             		!lastSongFromFile.equals(lastSong))) {
@@ -472,7 +428,6 @@ public class Setlist /*implements UserStreamListener*/ {
             					null, -1);
             		}
         			String noteUpdate = "";
-        			noteChar = "";
         			for (String setSong : setList) {
         				if (setSong.contains(noteSong)) {
         					if (setSong.contains("5||")) {
@@ -506,65 +461,6 @@ public class Setlist /*implements UserStreamListener*/ {
         setList.clear();
         noteList.clear();
         noteMap.clear();
-        /*
-        sb.setLength(0);
-        sb.append("Current song: [");
-        sb.append("Testing");
-        sb.append("] Get live updates on your Android: https://play.google.com/store/apps/details?id=com.jeffthefate.dmbquiz");
-        authTweet(sb.toString(), new File(createScreenshot(readStringFromFile("/home/setlist2013-05-26T00:00:00.000Z.txt"))));
-        if (args.length > 0)
-        	newSetlist(args[0]);
-        else	
-        	newSetlist("https://whsec1.davematthewsband.com/backstage.asp?Month=5&year=2013&ShowID=1287526");
-        	//newSetlist("https://whsec1.davematthewsband.com/backstage.asp?Month=5&year=2013&ShowID=1287462");
-        //archiveSetlists();
-        String setlistText;
-        if (args.length > 0)
-        	setlistText = latestSetlist(args[0]);
-        else	
-        	setlistText = latestSetlist("https://whsec1.davematthewsband.com/backstage.asp");
-        //String setlistText = latestSetlist("http://jeffthefate.com/dmb-trivia-test");
-        logger.info(setlistText);
-        currDateString = getSetlistDateString(setlistText);
-        String setlistFile = SETLIST_FILENAME +
-                (currDateString.replace('/', '_')) + ".txt";
-        String lastSongFile = LAST_SONG_FILENAME +
-                (currDateString.replace('/', '_')) + ".txt";
-        String lastSetlist = readStringFromFile(setlistFile);
-        logger.info("lastSetlist:");
-        logger.info(lastSetlist);
-        String diff = StringUtils.difference(lastSetlist, setlistText);
-        logger.info("diff:");
-        logger.info(diff);
-        boolean hasChange = !StringUtils.isBlank(diff);
-        StringBuilder sb = new StringBuilder();
-        if (hasChange) {
-            writeStringToFile(setlistText, setlistFile);
-            // -1 if failure or not a new setlist
-            // 0 if a new setlist (latest)
-            // 1 if there is a newer date available already
-            int newDate = uploadLatest(setlistText);
-            if (newDate == 0 || (newDate == -1 &&
-            		!readStringFromFile(lastSongFile).equals(lastSong))) {
-                postNotification(getPushJsonString(lastSong, setlistText,
-                        getExpireDateString()));
-                writeStringToFile(lastSong, lastSongFile);
-                sb.append("Current song: [");
-                sb.append(lastSong);
-                sb.append("] Get live updates on your Android: https://play.google.com/store/apps/details?id=com.jeffthefate.dmbquiz");
-                authTweet(sb.toString(), new File(createScreenshot(setlistText)));
-            }
-            else if (readStringFromFile(lastSongFile).equals(lastSong)) {
-            	postNotification(getPushJsonString("", setlistText,
-                        getExpireDateString()));
-            }
-        }
-        StringBuilder sb = new StringBuilder();
-        sb.append("Current song: [");
-        sb.append("Testing");
-        sb.append("] Get live updates on your Android: https://play.google.com/store/apps/details?id=com.jeffthefate.dmbquiz");
-        authTweet(sb.toString(), new File(createScreenshot(readStringFromFile("/home/setlist2013-05-26T00:00:00.000Z.txt"))));
-        */
     }
     
     private String stripSpecialCharacters(String song) {
@@ -584,9 +480,9 @@ public class Setlist /*implements UserStreamListener*/ {
     	File file = new File(setlistDir);
     	String[] files = file.list();
     	Date latest = null;
-        Date date = null;
-        String curr = "";
-        String dateString = "";
+        Date date;
+        String curr;
+        String dateString;
     	for (int i = 0; i < files.length; i++) {
     		curr = files[i];
     		dateString = curr.substring("setlist".length(),
@@ -676,7 +572,7 @@ public class Setlist /*implements UserStreamListener*/ {
             HttpGet getMethod = new HttpGet(
                     "https://whsec1.davematthewsband.com/backstage.asp?year=" +
                     		i);
-            StringBuilder sb = new StringBuilder();
+            StringBuilder sb;
             String html = null;
             try {
                 response = client.execute(getMethod);
@@ -723,7 +619,7 @@ public class Setlist /*implements UserStreamListener*/ {
                     char apos = 39;
                     char endChar = 160;
                     StringBuilder locString = new StringBuilder();
-                    String dateString = null;
+                    String dateString;
                     StringBuilder setString = new StringBuilder();
                     int numTicketings = 0;
                     boolean br = false;
@@ -1031,32 +927,42 @@ public class Setlist /*implements UserStreamListener*/ {
         nameValuePairs.add(new BasicNameValuePair("y", "0"));
         try {
             postMethod.setEntity(new UrlEncodedFormEntity(nameValuePairs));
-        } catch (UnsupportedEncodingException e1) {}
+        } catch (UnsupportedEncodingException e) {
+            logger.error("Unsupported encoding:");
+            logger.error(nameValuePairs);
+            e.printStackTrace();
+        }
         HttpResponse response = null;
         HttpClient client = createSecureConnection();
         try {
             response = client.execute(postMethod);
-        } catch (IOException e1) {}
+        } catch (IOException e) {
+            logger.error("Unable to connect to " +
+                    postMethod.getURI().toASCIIString());
+            e.printStackTrace();
+        }
         if (response == null || (response.getStatusLine().getStatusCode() !=
-                200 && response.getStatusLine().getStatusCode() != 302))
+                200 && response.getStatusLine().getStatusCode() != 302)) {
             return "Error";
+        }
         HttpGet getMethod = new HttpGet(url);
         StringBuilder sb = new StringBuilder();
         String html = null;
-        if (!url.startsWith("https"))
-        	client = HttpClientBuilder.create().build();
+        if (!url.startsWith("https")) {
+            client = HttpClientBuilder.create().build();
+        }
         try {
             response = client.execute(getMethod);
             html = EntityUtils.toString(response.getEntity(), "UTF-8");
             html = StringEscapeUtils.unescapeHtml4(html);
-        } catch (ClientProtocolException e1) {
+        } catch (ClientProtocolException e) {
             logger.info("Failed to connect to " +
                     getMethod.getURI().toASCIIString());
-            e1.printStackTrace();
-        } catch (IOException e1) {
+            e.printStackTrace();
+        } catch (IOException e) {
             logger.info("Failed to get setlist from " +
                     getMethod.getURI().toASCIIString());
-            e1.printStackTrace();
+            e.printStackTrace();
         }
         Document doc = Jsoup.parse(html);
         char badChar = 65533;
@@ -1108,12 +1014,6 @@ public class Setlist /*implements UserStreamListener*/ {
                                         sb.setLength(0);
                                     }
                                     else if (node.nodeName().equals("br")) {
-                                        /*
-                                        if (!hasBreak && hasEncore) {
-                                            setString.append("\n");
-                                            hasBreak = true;
-                                        }
-                                        */
                                         if (sb.length() > 0 &&
                                                 !StringUtils.isBlank(
                                                         sb.toString())) {
@@ -1219,295 +1119,6 @@ public class Setlist /*implements UserStreamListener*/ {
         return locString.append("\n").append(setString).toString();
     }
     
-    private String newSetlist(String url) {
-        HttpPost postMethod = new HttpPost(
-                "https://whsec1.davematthewsband.com/login.asp");
-        postMethod.addHeader("Accept",
-                "text/html, application/xhtml+xml, */*");
-        postMethod.addHeader("Referer",
-                "https://whsec1.davematthewsband.com/login.asp");
-        postMethod.addHeader("Accept-Language", "en-US");
-        postMethod.addHeader("User-Agent",
-                "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; WOW64; " +
-    			"Trident/5.0)");
-        postMethod.addHeader("Content-Type",
-                "application/x-www-form-urlencoded");
-        postMethod.addHeader("Accept-Encoding", "gzip, deflate");
-        postMethod.addHeader("Host", "whsec1.davematthewsband.com");
-        postMethod.addHeader("Connection", "Keep-Alive");
-        postMethod.addHeader("Cache-Control", "no-cache");
-        postMethod.addHeader("Cookie",
-                "MemberInfo=isInternational=&MemberID=&UsrCount=04723365306&" +
-        		"ExpDate=&Username=; ASPSESSIONIDQQTDRTTC=" +
-        		"PKEGDEFCJBLAIKFCLAHODBHN; __utma=10963442.556285711." +
-        		"1366154882.1366154882.1366154882.1; __utmb=10963442.2.10." +
-        		"1366154882; __utmc=10963442; __utmz=10963442.1366154882.1.1." +
-        		"utmcsr=warehouse.dmband.com|utmccn=(referral)|utmcmd=" +
-        		"referral|utmcct=/; ASPSESSIONIDSSDRTSRA=" +
-        		"HJBPPKFCJGEJKGNEMJJMAIPN");
-        
-        List<NameValuePair> nameValuePairs =
-                new ArrayList<NameValuePair>();
-        nameValuePairs.add(new BasicNameValuePair("the_url", ""));
-        nameValuePairs.add(new BasicNameValuePair("form_action", "login"));
-        nameValuePairs.add(new BasicNameValuePair("Username", "fateman"));
-        nameValuePairs.add(new BasicNameValuePair("Password", "nintendo"));
-        nameValuePairs.add(new BasicNameValuePair("x", "0"));
-        nameValuePairs.add(new BasicNameValuePair("y", "0"));
-        try {
-            postMethod.setEntity(new UrlEncodedFormEntity(nameValuePairs));
-        } catch (UnsupportedEncodingException e1) {}
-        HttpResponse response = null;
-        HttpClient client = createSecureConnection();
-        try {
-            response = client.execute(postMethod);
-        } catch (IOException e1) {}
-        if (response == null || (response.getStatusLine().getStatusCode() !=
-                200 && response.getStatusLine().getStatusCode() != 302))
-            return "Error";
-        HttpGet getMethod = new HttpGet(url);
-        StringBuilder sb = new StringBuilder();
-        String html = null;
-        if (!url.startsWith("https"))
-        	client = HttpClientBuilder.create().build();
-        try {
-            response = client.execute(getMethod);
-            html = EntityUtils.toString(response.getEntity(), "UTF-8");
-            html = StringEscapeUtils.unescapeHtml4(html);
-        } catch (ClientProtocolException e1) {
-            logger.info("Failed to connect to " +
-                    getMethod.getURI().toASCIIString());
-            e1.printStackTrace();
-        } catch (IOException e1) {
-            logger.info("Failed to get setlist from " +
-                    getMethod.getURI().toASCIIString());
-            e1.printStackTrace();
-        }
-        Document doc = Jsoup.parse(html);
-        char badChar = 65533;
-        char apos = 39;
-        char endChar = 160;
-        StringBuilder locString = new StringBuilder();
-        String dateString = null;
-        StringBuilder setString = new StringBuilder();
-        int numTicketings = 0;
-        boolean br = false;
-        boolean b = false;
-        int slot = 0;
-        String setlistId = null;
-        String lastPlay = null;
-        boolean hasSetCloser = false;
-        hasEncore = false;
-        hasGuests = false;
-        hasSegue = false;
-        firstBreak = false;
-        secondBreak = false;
-        String divStyle = "";
-        String locStyle = "padding-bottom:12px;padding-left:3px;color:#3995aa;";
-        String setStyle = "font-family:sans-serif;font-size:14;font-weight:" +
-        		"normal;margin-top:15px;margin-left:15px;";
-        sb.setLength(0);
-        if (doc != null) {
-            Element body = doc.body();
-            Elements divs = body.getElementsByTag("div");
-            for (Element div : divs) {
-            	if (div.hasAttr("style")) {
-            		divStyle = div.attr("style");
-            		if (divStyle.equals(locStyle))
-            			logger.info("LOC: " + div.ownText());
-        			else if (divStyle.equals(setStyle)) {
-        				String divText = div.ownText();
-        				logger.info("SET: " + divText);
-        				logger.info("COUNT: " + StringUtils.countMatches(
-        						divText, String.valueOf(endChar)));
-        				String[] setAndNotes = divText.split(
-        						"(([\\s]*)[" + String.valueOf(endChar) +
-        						"]([\\s]*)){3}");
-        				for (int i = 0; i < setAndNotes.length; i++) {
-        					logger.info(setAndNotes[i]);
-        				}
-        				sb.append(StringUtils.remove(divText, endChar));
-        				logger.info("SET: " + sb.toString());
-        				String[] sections = sb.toString().split(
-        						"-------- ENCORE --------");
-        				for (int i = 0; i < sections.length; i++) {
-        					logger.info(sections[i]);
-        				}
-        				String[] songs = sections[0].split("\\d+[\\.]{1}");
-        				for (int i = 0; i < songs.length; i++) {
-        					logger.info(songs[i]);
-        				}
-        			}
-            	}
-            }
-            /*
-            Elements ticketings = body.getElementsByAttributeValue("id",
-                    "ticketingColText");
-            for (Element ticketing : ticketings) {
-                for (Element single : ticketing.getAllElements()) {
-                    if (single.tagName().equals("span")) {
-                    	if (locString.length() > 0) {
-                    		dateString = getSetlistDateString(locString.toString());
-                    		setlistId = createLatest(dateString);
-                    	}
-                        for (Node node : single.childNodes()) {
-                            if (!(node instanceof Comment)) {
-                                if (node instanceof TextNode) {
-                                	logger.info("TextNode is blank: " + StringUtils.isBlank(((TextNode) node).text()));
-                                	if (lastPlay != null && !StringUtils.isBlank(((TextNode) node).text())) {
-                                		uploadSong(lastPlay, ++slot, setlistId, slot == 1, false, false);
-                                		logger.info("TextNode nulling lastPlay");
-                                		logger.info("TextNode: '" + ((TextNode) node).text() + "'");
-                                		lastPlay = null;
-                                	}
-                                    sb.append(StringUtils.remove(((TextNode) node).text(), endChar));
-                                } else {
-                                    if (node.nodeName().equals("div")) {
-                                        // End current string
-                                        if (setString.length() > 0)
-                                            setString.append("\n");
-                                        if (StringUtils.replaceChars(
-                                                StringUtils.strip(
-                                                        sb.toString()),
-                                                        badChar, apos)
-                                                .startsWith("Encore") && !hasEncore) {
-                                            hasEncore = true;
-                                            if (lastPlay != null && !hasSetCloser) {
-                                            	uploadSong(lastPlay, ++slot, setlistId, slot == 1, true, false);
-                                            	hasSetCloser = true;
-                                            	logger.info("div nulling lastPlay");
-                                            	lastPlay = null;
-                                            }
-                                            if (!firstBreak) {
-                                                setString.append("\n");
-                                                firstBreak = true;
-                                            }
-                                            if (sb.indexOf(":") == -1) {
-                                            	sb.setLength(0);
-                                            	sb.append("Encore:");
-                                            }
-                                        }
-                                        else {
-                                        	lastPlay = StringUtils.replaceChars(
-                                					StringUtils.strip(
-                                                            sb.toString()),
-                                                            badChar, apos);
-                                        }
-                                        setString.append(
-                                            StringUtils.replaceChars(
-                                                StringUtils.strip(
-                                                        sb.toString()),
-                                                        badChar, apos));
-                                        setString.trimToSize();
-                                        sb.setLength(0);
-                                    }
-                                    else if (node.nodeName().equals("br")) {
-                                        if (sb.length() > 0 &&
-                                                !StringUtils.isBlank(
-                                                        sb.toString())) {
-                                            if (setString.length() > 0)
-                                                setString.append("\n");
-                                            setString.append(
-                                                StringUtils.replaceChars(
-                                                    StringUtils.strip(
-                                                            sb.toString()),
-                                                            badChar, apos));
-                                            setString.trimToSize();
-                                            sb.setLength(0);
-                                        }
-                                        if (firstBreak && !secondBreak && hasEncore) {
-                                            setString.append("\n");
-                                            secondBreak = true;
-                                            if (lastPlay != null) {
-                                            	uploadSong(lastPlay, ++slot, setlistId, slot == 1, false, true);
-                                            	logger.info("br nulling lastPlay");
-                                            	lastPlay = null;
-                                            }
-                                        }
-                                        if (!firstBreak) {
-                                        	logger.info("NOT firstBreak");
-                                        	logger.info("lastPlay: " + lastPlay);
-                                        	logger.info("hasSetCloser: " + hasSetCloser);
-                                            setString.append("\n");
-                                            firstBreak = true;
-                                            if (lastPlay != null && !hasSetCloser) {
-                                            	uploadSong(lastPlay, ++slot, setlistId, slot == 1, true, false);
-                                            	hasSetCloser = true;
-                                            	logger.info("!firstBreak nulling lastPlay");
-                                            	lastPlay = null;
-                                            }
-                                        }
-                                    }
-                                    else if (node.nodeName().equals("img")) {
-                                        sb.append("->");
-                                        hasSegue = true;
-                                        if (!hasGuests) {
-                                            lastSong = StringUtils.chomp(setString.toString()).substring(
-                                                    StringUtils.chomp(setString.toString()).lastIndexOf("\n")+1);
-                                        }
-                                    }
-                                    else if (node instanceof Element) {
-                                        sb.append(((Element) node).text());
-                                        if (!StringUtils.replaceChars(
-                                                StringUtils.strip(
-                                                        sb.toString()),
-                                                        badChar, apos)
-                                                .equals("Encore:") && !hasGuests) {
-                                            hasGuests = true;
-                                            lastSong = StringUtils.chomp(setString.toString()).substring(
-                                                    StringUtils.chomp(setString.toString()).lastIndexOf("\n")+1);
-                                        }
-                                        else if (StringUtils.replaceChars(
-                                                StringUtils.strip(
-                                                        sb.toString()),
-                                                        badChar, apos)
-                                                .equals("Encore:")) {
-                                            hasEncore = true;
-                                            lastSong = StringUtils.strip(sb.toString());
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        if (!hasSegue && !hasGuests) {
-                            lastSong = StringUtils.strip(setString.toString()).substring(
-                                    StringUtils.strip(setString.toString()).lastIndexOf("\n")+1);
-                        }
-                        if (setString.length() > 0)
-                            setString.append("\n");
-                        setString.append(
-                            StringUtils.replaceChars(
-                                StringUtils.strip(
-                                        sb.toString()),
-                                        badChar, apos));
-                        setString.trimToSize();
-                    }
-                    else if (setString.length() == 0) {
-                        if (single.id().equals("ticketingColText"))
-                            numTicketings++;
-                        if (numTicketings == 2 && single.nodeName().equals("div")) {
-                            locString.append(single.ownText());
-                            locString.append("\n");
-                        }
-                        if (single.tagName().equals("br"))
-                            br = true;
-                        else if (single.tagName().equals("b"))
-                            b = true;
-                        if (br && b) {
-                            locString.append(single.ownText());
-                            locString.append("\n");
-                            br = false;
-                            b = false;
-                        }
-                    }
-                }
-            }
-            */
-        }
-        logger.info("lastSong: " + lastSong);
-        return locString.append("\n").append(setString).toString();
-    }
-    
     private Document getPageDocument(String url) {
     	if (url.startsWith("http")) {
 	        HttpPost postMethod = new HttpPost(
@@ -1546,12 +1157,19 @@ public class Setlist /*implements UserStreamListener*/ {
 	        nameValuePairs.add(new BasicNameValuePair("y", "0"));
 	        try {
 	            postMethod.setEntity(new UrlEncodedFormEntity(nameValuePairs));
-	        } catch (UnsupportedEncodingException e1) {}
+	        } catch (UnsupportedEncodingException e) {
+                logger.error("Unsupported encoding for " + nameValuePairs);
+                e.printStackTrace();
+            }
 	        HttpResponse response = null;
 	        HttpClient client = createSecureConnection();
 	        try {
 	            response = client.execute(postMethod);
-	        } catch (IOException e1) {}
+	        } catch (IOException e) {
+                logger.error("Unable to connect to " +
+                        postMethod.getURI().toASCIIString());
+                e.printStackTrace();
+            }
 	        if (response == null || (response.getStatusLine().getStatusCode() !=
 	                200 && response.getStatusLine().getStatusCode() != 302))
 	        	logger.info("Failed to get response from to " +
@@ -1580,22 +1198,9 @@ public class Setlist /*implements UserStreamListener*/ {
     				readStringFromFile(url)));	
     	}
     }
-    
+
     public String liveSetlist(String url) {
     	Document doc = getPageDocument(url);
-        //Document doc = Jsoup.parse(StringEscapeUtils.unescapeHtml4(readStringFromFile("C:\\Users\\Jeff\\Desktop\\testLive.txt")));
-        //Document doc = Jsoup.parse(StringEscapeUtils.unescapeHtml4(readStringFromFile("C:\\Users\\Jeff\\Desktop\\testOne.txt")));
-        //Document doc = Jsoup.parse(StringEscapeUtils.unescapeHtml4(readStringFromFile("C:\\Users\\Jeff\\Desktop\\testTwo.txt")));
-        //Document doc = Jsoup.parse(StringEscapeUtils.unescapeHtml4(readStringFromFile("C:\\Users\\Jeff\\Desktop\\testThree.txt")));
-        //Document doc = Jsoup.parse(StringEscapeUtils.unescapeHtml4(readStringFromFile("C:\\Users\\Jeff\\Desktop\\testFour.txt")));
-        //Document doc = Jsoup.parse(StringEscapeUtils.unescapeHtml4(readStringFromFile("C:\\Users\\Jeff\\Desktop\\testFive.txt")));
-    	//Document doc = Jsoup.parse(StringEscapeUtils.unescapeHtml4(readStringFromFile("C:\\Users\\Jeff\\Desktop\\testSix.txt")));
-    	//Document doc = Jsoup.parse(StringEscapeUtils.unescapeHtml4(readStringFromFile("C:\\Users\\Jeff\\Desktop\\testSeven.txt")));
-    	//Document doc = Jsoup.parse(StringEscapeUtils.unescapeHtml4(readStringFromFile("C:\\Users\\Jeff\\Desktop\\testEight.txt")));
-    	//Document doc = Jsoup.parse(StringEscapeUtils.unescapeHtml4(readStringFromFile("C:\\Users\\Jeff\\Desktop\\testNine.txt")));
-    	//Document doc = Jsoup.parse(StringEscapeUtils.unescapeHtml4(readStringFromFile("C:\\Users\\Jeff\\Desktop\\testTen.txt")));
-    	//Document doc = Jsoup.parse(StringEscapeUtils.unescapeHtml4(readStringFromFile("/home/testEleven.txt")));
-        //Document doc = Jsoup.parse(StringEscapeUtils.unescapeHtml4(readStringFromFile("/home/testLive.txt")));
         char badChar = 65533;
         char apos = 39;
         char endChar = 160;
@@ -1615,12 +1220,12 @@ public class Setlist /*implements UserStreamListener*/ {
         		"font-weight:normal;margin-top:15px;margin-left:15px;";
         String locStyle = "padding-bottom:12px;padding-left:3px;color:#3995aa;";
         String setStyle = "Color:#000000;Position:Absolute;Top:";
-        String divText = "";
+        String divText;
         TreeMap<Integer, String> songMap = new TreeMap<Integer, String>();
-        int currentLoc = 0;
-        String currSong = "";
+        int currentLoc;
+        String currSong;
         int breaks = 0;
-        String fontText = "";
+        String fontText;
         boolean hasSong = false;
         if (doc != null) {
         	// Find nodes in the parent setlist node, for both types
@@ -1977,29 +1582,6 @@ public class Setlist /*implements UserStreamListener*/ {
             				logger.info("-> ");
             				hasSegue = true;
             			}
-            			// If either still in main set
-            			// OR
-            			// In encore with second break
-            			// This indicates the img is in the show notes
-            			/*
-            			if ((firstBreak && !hasEncore) || secondBreak) {
-            				if (noteList.isEmpty()) {
-            					noteList.add("Notes:");
-            					logger.info("Notes:");
-            				}
-                            noteList.add("-> ");
-                            logger.info("-> ");
-                            hasSegue = true;
-            			}
-            			// If img tag is in the set
-            			else {
-            				logger.info("Adding ->");
-		            		currSong = setList.get(setList.size()-1).concat(
-		            				" ->");
-		            		setList.set(setList.size()-1, currSong);
-		            		lastSong = currSong;
-            			}
-            			*/
             			breaks = 0;
             		}
             		// Found a guest symbol
@@ -2042,68 +1624,7 @@ public class Setlist /*implements UserStreamListener*/ {
             			}
             		}
             	}
-            	//logger.info(noteMap.toString());
-            	//logger.info(noteList.toString());
             }
-            /*
-            Elements divs = body.getElementsByTag("div");
-            int currentLoc = 0;
-            String currSong = "";
-            for (Element div : divs) {
-            	if (div.hasAttr("style")) {
-            		divStyle = div.attr("style");
-            		if (divStyle.equals(locStyle)) {
-            			for (Node node : div.childNodes()) {
-                            if (!(node instanceof Comment)) {
-                                if (node instanceof TextNode) {
-                                	locList.add(StringUtils.trim(((TextNode)node).text()));
-                                }
-                            }
-            			}
-            		}
-        			else if (divStyle.startsWith(setStyle)) {
-        				String[] locations = divStyle.split(setStyle);
-        				currentLoc = Integer.parseInt(locations[1].split(";")[0]);
-        				String divText = div.ownText();
-        				divText = StringUtils.remove(divText, endChar);
-        				String[] songs = divText.split("\\d+[\\.]{1}");
-        				if (songs.length > 1) {
-        					currSong = songs[1];
-        					Elements imgs = div.getElementsByTag("img");
-        					if (!imgs.isEmpty()) {
-        						currSong = currSong.concat(" ->");
-        						hasSegue = true;
-        					}
-                			songMap.put(currentLoc, currSong);
-        				}
-        			}
-        			else {
-        				boolean segue = false;
-        				String divText = div.ownText();
-        				if (!StringUtils.isBlank(divText)) {
-	        				for (Node node : div.childNodes()) {
-	                            if (!(node instanceof Comment)) {
-	                                if (node instanceof TextNode) {
-	                                	String nodeText = StringUtils.remove(((TextNode)node).text(), endChar);
-	                                	if (!StringUtils.isBlank(nodeText)) {
-	                                		if (segue)
-	                                			noteList.set(noteList.size()-1, noteList.get(noteList.size()-1).concat(StringUtils.trim(nodeText)));
-	                                		else
-	                                			noteList.add(StringUtils.trim(nodeText));
-	                                		segue = false;
-	                                	}
-	                                }
-	                                else if (node.nodeName().equals("img")) {
-	                                	noteList.add("-> ");
-	                                	segue = true;
-	                                }
-	                            }
-	            			}
-        				}
-        			}
-            	}
-            }
-            */
             for (Entry<Integer, String> song : songMap.entrySet()) {
             	currSong = song.getValue();
             	setList.add(currSong);
@@ -2129,224 +1650,43 @@ public class Setlist /*implements UserStreamListener*/ {
         		String partial = noteList.remove(partialIndex);
         		noteList.add(partial);
         	}
-            /*
-            Elements ticketings = body.getElementsByAttributeValue("id",
-                    "ticketingColText");
-            for (Element ticketing : ticketings) {
-                for (Element single : ticketing.getAllElements()) {
-                    if (single.tagName().equals("span")) {
-                    	if (locString.length() > 0) {
-                    		dateString = getSetlistDateString(locString.toString());
-                    		setlistId = createLatest(dateString);
-                    	}
-                        for (Node node : single.childNodes()) {
-                            if (!(node instanceof Comment)) {
-                                if (node instanceof TextNode) {
-                                	logger.info("TextNode is blank: " + StringUtils.isBlank(((TextNode) node).text()));
-                                	if (lastPlay != null && !StringUtils.isBlank(((TextNode) node).text())) {
-                                		uploadSong(lastPlay, ++slot, setlistId, slot == 1, false, false);
-                                		logger.info("TextNode nulling lastPlay");
-                                		logger.info("TextNode: '" + ((TextNode) node).text() + "'");
-                                		lastPlay = null;
-                                	}
-                                    sb.append(StringUtils.remove(((TextNode) node).text(), endChar));
-                                } else {
-                                    if (node.nodeName().equals("div")) {
-                                        // End current string
-                                        if (setString.length() > 0)
-                                            setString.append("\n");
-                                        if (StringUtils.replaceChars(
-                                                StringUtils.strip(
-                                                        sb.toString()),
-                                                        badChar, apos)
-                                                .startsWith("Encore") && !hasEncore) {
-                                            hasEncore = true;
-                                            if (lastPlay != null && !hasSetCloser) {
-                                            	uploadSong(lastPlay, ++slot, setlistId, slot == 1, true, false);
-                                            	hasSetCloser = true;
-                                            	logger.info("div nulling lastPlay");
-                                            	lastPlay = null;
-                                            }
-                                            if (!firstBreak) {
-                                                setString.append("\n");
-                                                firstBreak = true;
-                                            }
-                                            if (sb.indexOf(":") == -1) {
-                                            	sb.setLength(0);
-                                            	sb.append("Encore:");
-                                            }
-                                        }
-                                        else {
-                                        	lastPlay = StringUtils.replaceChars(
-                                					StringUtils.strip(
-                                                            sb.toString()),
-                                                            badChar, apos);
-                                        }
-                                        setString.append(
-                                            StringUtils.replaceChars(
-                                                StringUtils.strip(
-                                                        sb.toString()),
-                                                        badChar, apos));
-                                        setString.trimToSize();
-                                        sb.setLength(0);
-                                    }
-                                    else if (node.nodeName().equals("br")) {
-                                        if (sb.length() > 0 &&
-                                                !StringUtils.isBlank(
-                                                        sb.toString())) {
-                                            if (setString.length() > 0)
-                                                setString.append("\n");
-                                            setString.append(
-                                                StringUtils.replaceChars(
-                                                    StringUtils.strip(
-                                                            sb.toString()),
-                                                            badChar, apos));
-                                            setString.trimToSize();
-                                            sb.setLength(0);
-                                        }
-                                        if (firstBreak && !secondBreak && hasEncore) {
-                                            setString.append("\n");
-                                            secondBreak = true;
-                                            if (lastPlay != null) {
-                                            	uploadSong(lastPlay, ++slot, setlistId, slot == 1, false, true);
-                                            	logger.info("br nulling lastPlay");
-                                            	lastPlay = null;
-                                            }
-                                        }
-                                        if (!firstBreak) {
-                                        	logger.info("NOT firstBreak");
-                                        	logger.info("lastPlay: " + lastPlay);
-                                        	logger.info("hasSetCloser: " + hasSetCloser);
-                                            setString.append("\n");
-                                            firstBreak = true;
-                                            if (lastPlay != null && !hasSetCloser) {
-                                            	uploadSong(lastPlay, ++slot, setlistId, slot == 1, true, false);
-                                            	hasSetCloser = true;
-                                            	logger.info("!firstBreak nulling lastPlay");
-                                            	lastPlay = null;
-                                            }
-                                        }
-                                    }
-                                    else if (node.nodeName().equals("img")) {
-                                        sb.append("->");
-                                        hasSegue = true;
-                                        if (!hasGuests) {
-                                            lastSong = StringUtils.chomp(setString.toString()).substring(
-                                                    StringUtils.chomp(setString.toString()).lastIndexOf("\n")+1);
-                                        }
-                                    }
-                                    else if (node instanceof Element) {
-                                        sb.append(((Element) node).text());
-                                        if (!StringUtils.replaceChars(
-                                                StringUtils.strip(
-                                                        sb.toString()),
-                                                        badChar, apos)
-                                                .equals("Encore:") && !hasGuests) {
-                                            hasGuests = true;
-                                            lastSong = StringUtils.chomp(setString.toString()).substring(
-                                                    StringUtils.chomp(setString.toString()).lastIndexOf("\n")+1);
-                                        }
-                                        else if (StringUtils.replaceChars(
-                                                StringUtils.strip(
-                                                        sb.toString()),
-                                                        badChar, apos)
-                                                .equals("Encore:")) {
-                                            hasEncore = true;
-                                            lastSong = StringUtils.strip(sb.toString());
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        if (!hasSegue && !hasGuests) {
-                            lastSong = StringUtils.strip(setString.toString()).substring(
-                                    StringUtils.strip(setString.toString()).lastIndexOf("\n")+1);
-                        }
-                        if (setString.length() > 0)
-                            setString.append("\n");
-                        setString.append(
-                            StringUtils.replaceChars(
-                                StringUtils.strip(
-                                        sb.toString()),
-                                        badChar, apos));
-                        setString.trimToSize();
-                    }
-                    else if (setString.length() == 0) {
-                        if (single.id().equals("ticketingColText"))
-                            numTicketings++;
-                        if (numTicketings == 2 && single.nodeName().equals("div")) {
-                            locString.append(single.ownText());
-                            locString.append("\n");
-                        }
-                        if (single.tagName().equals("br"))
-                            br = true;
-                        else if (single.tagName().equals("b"))
-                            b = true;
-                        if (br && b) {
-                            locString.append(single.ownText());
-                            locString.append("\n");
-                            br = false;
-                            b = false;
-                        }
-                    }
-                }
-            }
-            */
         }
-        
         return doc.body().toString();
     }
-    /*
-    private static String getSetlistDateString(String latestSetlist) {
-        SimpleDateFormat dateFormat = new SimpleDateFormat("MM/dd/yyyy");
-        Date date = null;
-        String subString = latestSetlist.substring(0,
-                latestSetlist.indexOf("\n"));
-        String dateString = null;
-        try {
-            date = dateFormat.parse(subString);
-            dateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
-            dateString = dateFormat.format(date.getTime());
-        } catch (ParseException e2) {
-            logger.info("Failed to parse date from " + subString);
-            e2.printStackTrace();
-        }
-        return dateString;
-    }
-    */
+
     private String getNewSetlistDateString(String dateLine) {
         SimpleDateFormat dateFormat = new SimpleDateFormat("MMM dd yyyy");
-        Date date = null;
+        Date date;
         String dateString = null;
         try {
             date = dateFormat.parse(dateLine);
             dateFormat = new SimpleDateFormat(DATE_FORMAT);
             dateString = dateFormat.format(date.getTime());
-        } catch (ParseException e2) {
+        } catch (ParseException e) {
             logger.info("Failed to parse date from " + dateLine);
-            e2.printStackTrace();
+            e.printStackTrace();
         }
         return dateString;
     }
     
     private String getShortSetlistString(String dateLine) {
     	SimpleDateFormat dateFormat = new SimpleDateFormat("MMM dd yyyy");
-        Date date = null;
+        Date date;
         String dateString = null;
         try {
             date = dateFormat.parse(dateLine);
             dateFormat = new SimpleDateFormat("yyyy-MM-dd");
             dateString = dateFormat.format(date.getTime());
-        } catch (ParseException e2) {
+        } catch (ParseException e) {
             logger.info("Failed to parse date from " + dateLine);
-            e2.printStackTrace();
+            e.printStackTrace();
         }
         return dateString;
     }
     
     private String getTweetDateString(String dateLine) {
         SimpleDateFormat dateFormat = new SimpleDateFormat("MMM dd yyyy");
-        Date date = null;
+        Date date;
         String dateString = null;
         try {
             date = dateFormat.parse(dateLine);
@@ -2366,156 +1706,16 @@ public class Setlist /*implements UserStreamListener*/ {
         date.setTime(System.currentTimeMillis() + 300000); // 5 minutes
         return dateFormat.format(date.getTime());
     }
-    /*
-    private static int getQuestionCount() {
-    	DefaultHttpClient httpclient = new DefaultHttpClient();
-        HttpEntity entity = null;
-        HttpResponse response = null;
-        String responseString = null;
-        String url = "https://api.parse.com/1/classes/Question?";
-        url += ("count=1&limit=0&where=%7B%22%24or%22%3A%5B%7B%22trivia%22%3A" +
-        		"%7B%22%24exists%22%3Afalse%7D%7D%2C%7B%22trivia%22%3Afalse" +
-        		"%7D%5D%7D");
-        HttpGet httpGet = new HttpGet(url);
-        logger.info(url);
-        httpGet.addHeader("X-Parse-Application-Id",
-        		"ImI8mt1EM3NhZNRqYZOyQpNSwlfsswW73mHsZV3R");
-        httpGet.addHeader("X-Parse-REST-API-Key",
-        		"1smRSlfAvbFg4AsDxat1yZ3xknHQbyhzZ4msAi5w");
-        try {
-            response = httpclient.execute(httpGet);
-            if (response.getStatusLine().getStatusCode() != 200) {
-                logger.info("GET questions failed!");
-                return -1;
-            }
-            entity = response.getEntity();
-            if (entity != null)
-                 responseString = EntityUtils.toString(response.getEntity());  
-        } catch (ClientProtocolException e1) {
-            logger.info("Failed to connect to " +
-                    httpGet.getURI().toASCIIString());
-            e1.printStackTrace();
-        } catch (IOException e1) {
-            logger.info("Failed to get setlist from " +
-                    httpGet.getURI().toASCIIString());
-            e1.printStackTrace();
-        }
-        logger.info("COUNT: " + responseString);
-        return getQuestionCountFromResponse(responseString);
-    }
-    
-    private static void markAsTrivia(String objectId, boolean isTrivia) {
-    	String setTrivia = null;
-    	if (isTrivia)
-    		setTrivia = "{\"trivia\":true}";
-    	else
-    		setTrivia = "{\"trivia\":false}";
-    	DefaultHttpClient httpclient = new DefaultHttpClient();
-        HttpEntity entity = new StringEntity(setTrivia,
-        		ContentType.APPLICATION_JSON);
-        HttpResponse response = null;
-        String url = "https://api.parse.com/1/classes/Question/" + objectId;
-        HttpPut httpPut = new HttpPut(url);
-        httpPut.setEntity(entity);
-        httpPut.addHeader("X-Parse-Application-Id",
-        		"ImI8mt1EM3NhZNRqYZOyQpNSwlfsswW73mHsZV3R");
-        httpPut.addHeader("X-Parse-REST-API-Key",
-        		"1smRSlfAvbFg4AsDxat1yZ3xknHQbyhzZ4msAi5w");
-        try {
-            response = httpclient.execute(httpPut);
-            if (response.getStatusLine().getStatusCode() != 200) {
-                logger.info("PUT question " + objectId + " failed!");
-                return;
-            }
-        } catch (ClientProtocolException e1) {
-            logger.info("Failed to connect to " +
-            		httpPut.getURI().toASCIIString());
-            e1.printStackTrace();
-        } catch (IOException e1) {
-            logger.info("Failed to get setlist from " +
-            		httpPut.getURI().toASCIIString());
-            e1.printStackTrace();
-        }
-    }
-    
-    private static void markAllAsTrivia(boolean isTrivia) {
-    	Map<String, String> questionMap;
-    	do {
-    		questionMap = getQuestion(true, 1, 0);
-    		if (!questionMap.isEmpty())
-    			markAsTrivia(questionMap.get("objectId"), isTrivia);
-    	} while (!questionMap.isEmpty());
-    }
-    
-    // Need to get a random question not recently asked
-    private static Map<String, String> getQuestion(boolean isTrivia,
-    		int limit, int skip) {
-    	logger.info("isTrivia: " + isTrivia);
-    	logger.info("limit: " + limit);
-    	logger.info("skip: " + skip);
-        DefaultHttpClient httpclient = new DefaultHttpClient();
-        HttpEntity entity = null;
-        HttpResponse response = null;
-        String responseString = null;
-        String url = "https://api.parse.com/1/classes/Question?";
-    	if (skip >= 0)
-    		url += ("skip=" + skip);
-		url += ("&limit=" + limit);
-		if (isTrivia)
-			url += "&where=%7B%22trivia%22%3Atrue%7D";
-		else
-			url += ("&where=%7B%22%24or%22%3A%5B%7B%22trivia%22%3A%7B%22" +
-					"%24exists%22%3Afalse%7D%7D%2C%7B%22trivia%22%3Afalse" +
-					"%7D%5D%7D");
-		
-		if (askedQuestions != null && !askedQuestions.isEmpty()) {
-			url += "&where=%7B%22objectId%22:%7B%22$nin%22:%5B";
-			for (String askedQuestion : askedQuestions) {
-				url += "%22";
-				url += askedQuestion;
-				url += "%22";
-				url += "%2C";
-			}
-			if (url.endsWith("%2C"))
-				url = StringUtils.removeEnd(url, "%2C");
-			url += "%5D%7D%7D";
-		}
-		
-        HttpGet httpGet = new HttpGet(url);
-        logger.info(url);
-        httpGet.addHeader("X-Parse-Application-Id",
-        		"ImI8mt1EM3NhZNRqYZOyQpNSwlfsswW73mHsZV3R");
-        httpGet.addHeader("X-Parse-REST-API-Key",
-        		"1smRSlfAvbFg4AsDxat1yZ3xknHQbyhzZ4msAi5w");
-        try {
-            response = httpclient.execute(httpGet);
-            if (response.getStatusLine().getStatusCode() != 200) {
-                logger.info("GET questions failed!");
-                return null;
-            }
-            entity = response.getEntity();
-            if (entity != null)
-                 responseString = EntityUtils.toString(response.getEntity());  
-        } catch (ClientProtocolException e1) {
-            logger.info("Failed to connect to " +
-                    httpGet.getURI().toASCIIString());
-            e1.printStackTrace();
-        } catch (IOException e1) {
-            logger.info("Failed to get setlist from " +
-                    httpGet.getURI().toASCIIString());
-            e1.printStackTrace();
-        }
-        return getQuestionInfoFromResponse(responseString);
-    }
-    */
+
     private String getSetlist(String latestSetlist) {
         String dateString = getNewSetlistDateString(latestSetlist);
         logger.info("getSetlist dateString: " + dateString);
-        if (dateString == null)
+        if (dateString == null) {
             return null;
+        }
         HttpClient httpclient = HttpClientBuilder.create().build();
-        HttpEntity entity = null;
-        HttpResponse response = null;
+        HttpEntity entity;
+        HttpResponse response;
         String responseString = null;
         String url = "https://api.parse.com/1/classes/Setlist?";
         try {
@@ -3042,7 +2242,7 @@ public class Setlist /*implements UserStreamListener*/ {
 	  "className": "GameScore",
 	  "objectId": "Ed1nuqPvc"
 	}
-     */
+    */
     private String getPlayJsonString(String showId, Integer slot,
     		String songId, boolean isOpener, boolean isSetCloser,
     		boolean isEncoreCloser) {
@@ -3087,7 +2287,6 @@ public class Setlist /*implements UserStreamListener*/ {
         ObjectNode addRelationNode = factory.objectNode();
         ArrayNode relationArray = factory.arrayNode();
         ObjectNode relationNode = factory.objectNode();
-        // {"setlist":{"__op":"AddRelation","objects":[{"__type":"Pointer","className":"Song","objectId":"Vx4nudeWn"}]}}
         relationNode.put("__type", "Pointer");
         relationNode.put("className", "Play");
         relationNode.put("objectId", playId);
@@ -3097,81 +2296,7 @@ public class Setlist /*implements UserStreamListener*/ {
         rootNode.put("setlist", addRelationNode);
         return rootNode.toString();
     }
-    /*
-    private static int getQuestionCountFromResponse(String responseString) {
-    	JsonFactory f = new JsonFactory();
-        JsonParser jp;
-        int count = -1;
-        String fieldname;
-        try {
-            jp = f.createJsonParser(responseString);
-            jp.nextToken();
-            jp.nextToken();
-            fieldname = jp.getCurrentName();
-            if ("results".equals(fieldname)) { // contains an object
-                jp.nextToken();
-                while (jp.nextToken() != null) {
-                    jp.nextToken();
-                    fieldname = jp.getCurrentName();
-                    if ("count".equals(fieldname)) {
-                        jp.nextToken();
-                        count = Integer.parseInt(jp.getText().trim());
-                    }
-                }
-            }
-            jp.close(); // ensure resources get cleaned up timely and properly
-        } catch (JsonParseException e) {
-            logger.info("Failed to parse " + responseString);
-            e.printStackTrace();
-        } catch (IOException e) {
-            logger.info("Failed to parse " + responseString);
-            e.printStackTrace();
-        }
-        return count;
-    }
-    
-    private static Map<String, String> getQuestionInfoFromResponse(
-    		String responseString) {
-    	JsonFactory f = new JsonFactory();
-        JsonParser jp;
-        Map<String, String> questionMap = new HashMap<String, String>();
-        String fieldname;
-        try {
-            jp = f.createJsonParser(responseString);
-            jp.nextToken();
-            jp.nextToken();
-            fieldname = jp.getCurrentName();
-            if ("results".equals(fieldname)) { // contains an object
-                jp.nextToken();
-                while (jp.nextToken() != null) {
-                    jp.nextToken();
-                    fieldname = jp.getCurrentName();
-                    if ("answer".equals(fieldname)) {
-                        jp.nextToken();
-                        questionMap.put(fieldname, jp.getText());
-                    }
-                    else if ("question".equals(fieldname)) {
-                    	questionMap.put(fieldname, jp.getText());
-                    }
-                    else if ("objectId".equals(fieldname)) {
-                    	questionMap.put(fieldname, jp.getText());
-                    }
-                    else if ("score".equals(fieldname)) {
-                    	questionMap.put(fieldname, jp.getText());
-                    }
-                }
-            }
-            jp.close(); // ensure resources get cleaned up timely and properly
-        } catch (JsonParseException e) {
-            logger.info("Failed to parse " + responseString);
-            e.printStackTrace();
-        } catch (IOException e) {
-            logger.info("Failed to parse " + responseString);
-            e.printStackTrace();
-        }
-        return questionMap;
-    }
-    */
+
     private String getVenueIdFromResponse(String responseString) {
     	logger.info("getVenueIdFromResponse: " + responseString);
     	if (responseString == null) {
@@ -3207,7 +2332,7 @@ public class Setlist /*implements UserStreamListener*/ {
 					}
 				}
 			}
-		    jp.close(); // ensure resources get cleaned up timely and properly
+		    jp.close();
 		} catch (JsonParseException e) {
 		    logger.info("Failed to parse " + responseString);
 		    e.printStackTrace();
@@ -3243,7 +2368,7 @@ public class Setlist /*implements UserStreamListener*/ {
 					}
 				}
 			}
-		    jp.close(); // ensure resources get cleaned up timely and properly
+		    jp.close();
 		} catch (JsonParseException e) {
 		    logger.info("Failed to parse " + responseString);
 		    e.printStackTrace();
@@ -3261,7 +2386,6 @@ public class Setlist /*implements UserStreamListener*/ {
 		JsonFactory f = new JsonFactory();
 		JsonParser jp;
 		String fieldName;
-		String venue = null;
 		try {
 		    jp = f.createJsonParser(response);
 		    JsonToken token;
@@ -3281,7 +2405,7 @@ public class Setlist /*implements UserStreamListener*/ {
 					}
 				}
 			}
-		    jp.close(); // ensure resources get cleaned up timely and properly
+		    jp.close();
 		} catch (JsonParseException e) {
 		    logger.info("Failed to parse " + response);
 		    e.printStackTrace();
@@ -3300,12 +2424,12 @@ public class Setlist /*implements UserStreamListener*/ {
         boolean insideObject = false;
         try {
             jp = f.createJsonParser(responseString);
-            token = jp.nextToken();
-            token = jp.nextToken();
+            jp.nextToken();
+            jp.nextToken();
             fieldname = jp.getCurrentName();
             if ("results".equals(fieldname)) { // contains an object
-            	token = jp.nextToken();
-            	token = jp.nextToken();
+            	jp.nextToken();
+            	jp.nextToken();
                 while ((token = jp.nextToken()) != null) {
                 	if (token == JsonToken.START_OBJECT) {
                 		insideObject = true;
@@ -3316,14 +2440,14 @@ public class Setlist /*implements UserStreamListener*/ {
                 	if (token == JsonToken.FIELD_NAME) {
 	                    fieldname = jp.getCurrentName();
 	                    if ("objectId".equals(fieldname) && !insideObject) {
-	                    	token = jp.nextToken();
+	                    	jp.nextToken();
 	                        objectId = jp.getText();
 	                        break;
 	                    }
                 	}
                 }
             }
-            jp.close(); // ensure resources get cleaned up timely and properly
+            jp.close();
         } catch (JsonParseException e) {
             logger.info("Failed to parse " + responseString);
             e.printStackTrace();
@@ -3357,7 +2481,7 @@ public class Setlist /*implements UserStreamListener*/ {
                     }
                 }
             }
-            jp.close(); // ensure resources get cleaned up timely and properly
+            jp.close();
         } catch (JsonParseException e) {
             logger.info("Failed to parse " + responseString);
             e.printStackTrace();
@@ -3384,7 +2508,7 @@ public class Setlist /*implements UserStreamListener*/ {
                     return objectId;
                 }
             }
-            jp.close(); // ensure resources get cleaned up timely and properly
+            jp.close();
         } catch (JsonParseException e) {
             logger.info("Failed to parse " + createString);
             e.printStackTrace();
@@ -3400,7 +2524,7 @@ public class Setlist /*implements UserStreamListener*/ {
         JsonParser jp;
         String fieldname;
         int slot = -1;
-        int tempSlot = -1;
+        int tempSlot;
         try {
             jp = f.createJsonParser(responseString);
             jp.nextToken();
@@ -3419,7 +2543,7 @@ public class Setlist /*implements UserStreamListener*/ {
                     }
                 }
             }
-            jp.close(); // ensure resources get cleaned up timely and properly
+            jp.close();
         } catch (JsonParseException e) {
             logger.info("Failed to parse " + responseString);
             e.printStackTrace();
@@ -3455,7 +2579,7 @@ public class Setlist /*implements UserStreamListener*/ {
                     }
                 }
             }
-            jp.close(); // ensure resources get cleaned up timely and properly
+            jp.close();
         } catch (JsonParseException e) {
             logger.info("Failed to parse " + responseString);
             e.printStackTrace();
@@ -3478,15 +2602,12 @@ public class Setlist /*implements UserStreamListener*/ {
     
     private static String getResponse(String className, String objectId) {
     	HttpClient httpclient = HttpClientBuilder.create().build();
-        HttpEntity entity = null;
-        HttpResponse response = null;
-        String responseString = null;
-        StringBuilder sb = new StringBuilder();
-        sb.append("https://api.parse.com/1/classes/");
-        sb.append(className);
-        sb.append("/");
-        sb.append(objectId);
-        String url = sb.toString();
+        HttpEntity entity;
+        HttpResponse response;
+        String url = "https://api.parse.com/1/classes/";
+        url += className;
+        url += "/";
+        url += objectId;
         HttpGet httpGet = new HttpGet(url);
         httpGet.addHeader("X-Parse-Application-Id",
         		"ImI8mt1EM3NhZNRqYZOyQpNSwlfsswW73mHsZV3R");
@@ -3517,9 +2638,8 @@ public class Setlist /*implements UserStreamListener*/ {
     private static String getResponse(String className, int limit,
     		String where) {
     	HttpClient httpclient = HttpClientBuilder.create().build();
-        HttpEntity entity = null;
-        HttpResponse response = null;
-        String responseString = null;
+        HttpEntity entity;
+        HttpResponse response;
         StringBuilder sb = new StringBuilder();
         sb.append("https://api.parse.com/1/classes/");
         sb.append(className);
@@ -3567,12 +2687,10 @@ public class Setlist /*implements UserStreamListener*/ {
     
     private static String postObject(String className, String postString) {
     	HttpClient httpclient = HttpClientBuilder.create().build();
-    	HttpEntity entity = null;
-        HttpResponse response = null;
-        StringBuilder sb = new StringBuilder();
-        sb.append("https://api.parse.com/1/classes/");
-        sb.append(className);
-        String url = sb.toString();
+    	HttpEntity entity;
+        HttpResponse response;
+        String url = "https://api.parse.com/1/classes/";
+        url += className;
         HttpPost httpPost = new HttpPost(url);
         httpPost.addHeader("X-Parse-Application-Id",
         		"ImI8mt1EM3NhZNRqYZOyQpNSwlfsswW73mHsZV3R");
@@ -3630,10 +2748,10 @@ public class Setlist /*implements UserStreamListener*/ {
         	});
             String dateString = getNewSetlistDateString(latestSetlist);
             Date newDate = convertStringToDate(DATE_FORMAT, dateString);
-            for (int i = 0; i < files.length; i++) {
-            	if (files[i].startsWith("setlist")) {
+            for (String file : files) {
+            	if (file.startsWith("setlist")) {
             		if (convertStringToDate(DATE_FORMAT,
-            				files[i].substring(7)).after(newDate)) {
+            				file.substring(7)).after(newDate)) {
             			logger.info("newer setlist file found!");
             			return 1;
             		}
@@ -3666,8 +2784,8 @@ public class Setlist /*implements UserStreamListener*/ {
     	if (dateString == null)
             return null;
         HttpClient httpclient = HttpClientBuilder.create().build();
-        HttpEntity entity = null;
-        HttpResponse response = null;
+        HttpEntity entity;
+        HttpResponse response;
         String responseString = null;
         String url = "https://api.parse.com/1/classes/Setlist?";
         try {
@@ -3731,9 +2849,9 @@ public class Setlist /*implements UserStreamListener*/ {
     
     private void resetEncoreCloser(String setlistId) {
     	HttpClient httpclient = HttpClientBuilder.create().build();
-        HttpEntity entity = null;
-        HttpResponse response = null;
-        String responseString = null;
+        HttpEntity entity;
+        HttpResponse response;
+        String responseString;
         String closerId = null;
         String url = "https://api.parse.com/1/classes/Play?";
         try {
@@ -3826,7 +2944,7 @@ public class Setlist /*implements UserStreamListener*/ {
     }
     
     private void writeBufferToFile(byte[] buffer, String filename) {
-        BufferedOutputStream bufStream = null;
+        BufferedOutputStream bufStream;
         try {
             bufStream = new BufferedOutputStream(
                     new FileOutputStream(filename, false), buffer.length);
@@ -3845,7 +2963,7 @@ public class Setlist /*implements UserStreamListener*/ {
     private byte[] readBufferFromFile(String filename) {
         File file = new File(filename);
         byte[] buffer = new byte[(int)file.length()];
-        BufferedInputStream bufStream = null;
+        BufferedInputStream bufStream;
         try {
             bufStream = new BufferedInputStream(new FileInputStream(file),
                     buffer.length);
@@ -3863,14 +2981,13 @@ public class Setlist /*implements UserStreamListener*/ {
     }
     
     private void writeStringToFile(String output, String filename) {
-        if (output != null)
+        if (output != null) {
             writeBufferToFile(output.getBytes(), filename);
+        }
     }
     
     private String readStringFromFile(String filename) {
-        StringBuilder sb = new StringBuilder();
-        sb.append(bytesToString(readBufferFromFile(filename)));
-        return sb.toString();
+        return bytesToString(readBufferFromFile(filename)).toString();
     }
     
     private void appendListToFile(List<String> output, String filename) {
@@ -4006,295 +3123,7 @@ public class Setlist /*implements UserStreamListener*/ {
 		} while (status == null && tries < 10);
 		return status;
     }
-    /*
-    private static void getAccessToken() {
-    	// The factory instance is re-useable and thread safe.
-        Twitter twitter = TwitterFactory.getSingleton();
-        twitter.setOAuthConsumer("z9rtG1MwLm1EHjIoN2kYAw",
-        		"n5eF6tVtORPTFVSauSA8IaIVY1jORuUVbwRPHKbXWyg");
-        RequestToken requestToken = null;
-		try {
-			requestToken = twitter.getOAuthRequestToken();
-		} catch (TwitterException e) {
-			e.printStackTrace();
-			return;
-		}
-        AccessToken accessToken = null;
-        BufferedReader br = new BufferedReader(
-        		new InputStreamReader(System.in));
-        while (null == accessToken) {
-          logger.info(
-        		  "Open the following URL and grant access to your account:");
-          logger.info(requestToken.getAuthorizationURL());
-          System.out.print(
-        		  "Enter the PIN(if aviailable) or just hit enter.[PIN]:");
-          String pin = null;
-		try {
-			pin = br.readLine();
-		} catch (IOException e) {
-			e.printStackTrace();
-			return;
-		}
-          try{
-             if(pin.length() > 0){
-               accessToken = twitter.getOAuthAccessToken(requestToken, pin);
-             }else{
-               accessToken = twitter.getOAuthAccessToken();
-             }
-          } catch (TwitterException te) {
-            if(401 == te.getStatusCode()){
-              logger.info("Unable to get the access token.");
-            }else{
-              te.printStackTrace();
-            }
-          }
-        }
-        logger.info(accessToken.getToken());
-        logger.info(accessToken.getTokenSecret());
-    }
-    
-    private interface WatchStreamListener {
-    	public void onCorrectUser(String correctAnswer,
-    			List<String> screenNames);
-		public void onFinalLeaders();
-    }
-    
-    private static String response;
-    private static String tempAnswer;
-    private static int diffCount;
-    private static List<String> winners = new ArrayList<String>(0);
-	private static String currAnswer;
-	private static long startTime;
-    
-    private static void watchTwitterStream(final String answer,
-    		final String questionId) {
-    	logger.info("watchTwitterStream");
-    	winners.clear();
-    	winners = new ArrayList<String>(0);
-    	logger.info("ANSWER: " + answer);
-    	currAnswer = answer;
-    	questionWait = WAIT_FOR_QUESTION;
-    	startTime = System.currentTimeMillis();
-    	if (twitterStream == null) {
-		    twitterStream = new TwitterStreamFactory(
-		    		setupTweet()).getInstance();
-		    twitterStream.addListener(listener);
-		    // sample() method internally creates a thread which manipulates TwitterStream and calls these adequate listener methods continuously.
-		    twitterStream.user();
-    	}
-    }
-    
-    private static int questionWait = WAIT_FOR_QUESTION;
-    
-    private static UserStreamListener listener = new UserStreamListener() {
-		@Override
-		public void onBlock(User arg0, User arg1) {}
-		@Override
-		public void onDeletionNotice(long arg0, long arg1) {}
-		@Override
-		public void onDirectMessage(DirectMessage arg0) {}
-		@Override
-		public void onFavorite(User arg0, User arg1, Status arg2) {}
-		@Override
-		public void onFollow(User arg0, User arg1) {}
-		@Override
-		public void onFriendList(long[] arg0) {}
-		@Override
-		public void onUnblock(User arg0, User arg1) {}
-		@Override
-		public void onUnfavorite(User arg0, User arg1, Status arg2) {}
-		@Override
-		public void onUserListCreation(User arg0, UserList arg1) {}
-		@Override
-		public void onUserListDeletion(User arg0, UserList arg1) {}
-		@Override
-		public void onUserListMemberAddition(User arg0, User arg1,
-				UserList arg2) {}
-		@Override
-		public void onUserListMemberDeletion(User arg0, User arg1,
-				UserList arg2) {}
-		@Override
-		public void onUserListSubscription(User arg0, User arg1,
-				UserList arg2) {}
-		@Override
-		public void onUserListUnsubscription(User arg0, User arg1,
-				UserList arg2) {}
-		@Override
-		public void onUserListUpdate(User arg0, UserList arg1) {}
-		@Override
-		public void onUserProfileUpdate(User arg0) {}
-		@Override
-		public void onDeletionNotice(StatusDeletionNotice arg0) {}
-		@Override
-		public void onScrubGeo(long arg0, long arg1) {}
-		@Override
-		public void onStallWarning(StallWarning arg0) {}
-		@Override
-		public void onStatus(Status status) {
-			// Get the diff characters between the answer and the response
-			logger.info("RAW RESPONSE: " + status.getText());
-			response = status.getText().toLowerCase(
-					Locale.getDefault()).replace(isDev ?
-							DEV_ACCOUNT : PROD_ACCOUNT, "").
-					replaceAll("[.,'`\":;/?\\-!@#]", "").trim();
-			logger.info("MASSAGED RESPONSE: " + response);
-			tempAnswer = currAnswer.toLowerCase(Locale.getDefault()).
-					replaceAll("[.,'`\":;/?\\-!@#]", "").trim();
-			logger.info("MASSAGED ANSWER: " + tempAnswer);
-			logger.info("questionWait: " + questionWait);
-			logger.info("WAIT_FOR_ANSWER: " + WAIT_FOR_ANSWER);
-			if (checkAnswer(tempAnswer, response,
-					status.getUser().getScreenName()) &&
-					questionWait > WAIT_FOR_ANSWER)
-				questionWait = WAIT_FOR_ANSWER;
-			logger.info("questionWait: " + questionWait);
-			logger.info("time left: " + (System.currentTimeMillis() -
-					startTime));
-			checkedNameMap = false;
-			checkedAcronymMap = false;
-			if (winners.size() == 3 ||
-					System.currentTimeMillis() - startTime >= questionWait) {
-				try {
-					Thread.sleep(WAIT_FOR_ANSWER);
-				} catch (InterruptedException e) {
-					e.printStackTrace();
-				}
-				watchStreamListener.onCorrectUser(currAnswer, winners);
-				logger.info("checking if asking a new question");
-			    if (totalQuestions < reqQuestions) {
-			    	if (totalQuestions % LEADERS_EVERY == 0) {
-			    		screenshot = new TriviaScreenshot(SETLIST_JPG_FILENAME,
-			    				ROBOTO_FONT_FILENAME, LEADERS_TITLE,
-			    				generateLeaderboard(), TRIVIA_MAIN_FONT_SIZE,
-			    				TRIVIA_DATE_FONT_SIZE, LEADERS_LIMIT);
-			    		postTweet("[#DMB Trivia] Current Top 10",
-			    				new File(screenshot.getOutputFilename()), -1);
-			    	}
-			    	if (totalQuestions == BONUS_ROUND) {
-			    		postTweet("[BONUS ROUND] " + BONUS_SCORE +
-			    				" pts added to the value of each question",
-			    				null, -1);
-			    		try {
-							Thread.sleep(PRE_ROUND_TIME);
-						} catch (InterruptedException e1) {
-							e1.printStackTrace();
-						}
-			    	}
-			    	else if (totalQuestions == ROUND_TWO) {
-			    		postTweet("[Starting ROUND 2] " + PLUS_SCORE +
-			    				" pts added to the value of each question",
-			    				null, -1);
-			    		try {
-							Thread.sleep(PRE_ROUND_TIME);
-						} catch (InterruptedException e1) {
-							e1.printStackTrace();
-						}
-			    	}
-					askQuestion();
-			    }
-			    else {
-			    	watchStreamListener.onFinalLeaders();
-			    	// When finished, close the stream
-				    twitterStream.cleanUp();
-				    twitterStream.shutdown();
-			    }
-			}
-		}
-		@Override
-		public void onTrackLimitationNotice(int arg0) {}
-		@Override
-		public void onException(Exception e) {
-			e.printStackTrace();
-		};
-    };
-    
-    private static boolean checkedNameMap = false;
-    private static boolean checkedAcronymMap = false;
-    
-    private static boolean checkAnswer(String answer, String response,
-    		String screenName) {
-    	int buffer = 4;
-    	switch (answer.length()) {
-    	case 15:
-    	case 14:
-    	case 13:
-    	case 12:
-    	case 11:
-    	case 10:
-    		buffer = 3;
-    		break;
-    	case 9:
-    	case 8:
-    	case 7:
-    	case 6:
-    	case 5:
-    		buffer = 2;
-    		break;
-    	case 4:
-    	case 3:
-    		buffer = 1;
-    		break;
-    	case 2:
-    	case 1:
-    		buffer = 0;
-    		break;
-    	}
-    	diffCount = StringUtils.getLevenshteinDistance(response, answer,
-    			buffer);
-    	boolean isCorrect = false;
-    	// If more than 4, wrong
-    	switch(diffCount) {
-    	case -1:
-    		if (answer.matches(".*\\d.*")) {
-    			Pattern p = Pattern.compile("-?\\d+");
-    			Matcher m = p.matcher(answer);
-    			while (m.find()) {
-    				answer = answer.replace(m.group(),
-    						EnglishNumberToWords.convert(
-    								Long.parseLong(m.group())));
-    			}
-    			checkAnswer(answer, response, screenName);
-    		}
-    		else if (response.matches(".*\\d.*")) {
-    			Pattern p = Pattern.compile("-?\\d+");
-    			Matcher m = p.matcher(response);
-    			while (m.find()) {
-    				response = response.replace(m.group(),
-    						EnglishNumberToWords.convert(
-    								Long.parseLong(m.group())));
-    			}
-    			checkAnswer(answer, response, screenName);
-    		}
-    		if (nameMap.containsKey(answer) && !checkedNameMap) {
-    			checkedNameMap = true;
-    			checkAnswer((String) nameMap.get(answer), response, screenName);
-    		}
-    		else if (nameMap.containsValue(answer) && !checkedNameMap) {
-    			checkedNameMap = true;
-    			checkAnswer((String) nameMap.getKey(answer), response,
-						screenName);
-    		}
-    		if (acronymMap.containsValue(answer) && !checkedAcronymMap) {
-    			checkedAcronymMap = true;
-    			checkAnswer((String) acronymMap.getKey(answer), response,
-    					screenName);
-    		}
-    		break;
-    	default:
-    		isCorrect = true;
-    		if (!winners.contains(screenName) && winners.size() < 3)
-    			winners.add(screenName);
-    		Integer userScore = scoreMap.get(screenName);
-    		if (userScore == null)
-    			scoreMap.put(screenName, currScore);
-    		else
-    			scoreMap.put(screenName, userScore+currScore);
-    		break;
-    	}
-    	return isCorrect;
-    }
-    */
-    
+
     private static final String CORRECT_ANSWERS_TEXT = "\nCorrect guesses:";
     
     /*
@@ -4309,9 +3138,9 @@ public class Setlist /*implements UserStreamListener*/ {
     	
     	lastSong = massageAnswer(lastSong);
     	
-    	boolean answerMatches = false;
-		boolean responseMatches = false;
-		boolean isCorrect = false;
+    	boolean answerMatches;
+		boolean responseMatches;
+		boolean isCorrect;
 		
 		ArrayList<String> banList = getBanList();
 		
@@ -4398,23 +3227,10 @@ public class Setlist /*implements UserStreamListener*/ {
     		return (String) sb.toString().subSequence(0, 140);
     	}
     	else {
-    		return (String) sb.toString();
+    		return sb.toString();
     	}
     }
-    /*
-    private void watchTwitterStream() {
-    	answers.clear();
-    	answers = new LinkedHashMap<String, String>();
-    	twitterStream = new TwitterStreamFactory(gameConfig)
-	    		.getInstance();
-	    twitterStream.addListener(this);
-	    // sample() method internally creates a thread which manipulates TwitterStream and calls these adequate listener methods continuously.
-	    twitterStream.user();
-	    //FilterQuery filterQuery = new FilterQuery();
-	    //filterQuery.track(new String[]{"#hashtag"});
-	    //twitterStream.filter(filterQuery);
-    }
-    */
+
     public void addAnswer(String userName, String message) {
     	answers.put(userName, massageResponse(message));
     }
@@ -4452,11 +3268,7 @@ public class Setlist /*implements UserStreamListener*/ {
 			e.printStackTrace();
 		}
 	}
-    
-    public void onStatus(Status status) {
-		processTweet(status);
-	}
-    
+
     public void banUser(String user) {
     	ArrayList<String> banList = getBanList();
     	if (!banList.contains(user)) {
@@ -4480,60 +3292,7 @@ public class Setlist /*implements UserStreamListener*/ {
 					"Failed banning user!");
 		}
     }
-    /*
-	public void onDeletionNotice(StatusDeletionNotice arg0) {}
-	public void onScrubGeo(long arg0, long arg1) {}
-	public void onStallWarning(StallWarning arg0) {}
-	public void onTrackLimitationNotice(int arg0) {}
-	public void onException(Exception arg0) {}
-	public void onBlock(User arg0, User arg1) {}
-	public void onDeletionNotice(long arg0, long arg1) {}
-	public void onDirectMessage(DirectMessage dm) {
-		logger.info("DM: " + dm.getSenderScreenName() + " : " + dm.getText());
-		if (dm.getSenderScreenName().equalsIgnoreCase("copperpot5") ||
-				dm.getSenderScreenName().equalsIgnoreCase("jeffthefate")) {
-			String massagedText = dm.getText().toLowerCase(Locale.getDefault()); 
-			if (massagedText.contains("end setlist")) {
-				kill = true;
-			}
-			else if (massagedText.contains("unban")) {
-				unbanUser(StringUtils.strip(massagedText.replace("unban", "")));
-			}
-			else if (massagedText.contains("ban")) {
-				banUser(StringUtils.strip(massagedText.replace("ban", "")));
-			}
-			else if (massagedText.contains("final scores")) {
-				if (massagedText.contains("image")) {
-					postSetlistScoresImage(FINAL_SCORES);
-				}
-				else {
-					postSetlistScoresText(FINAL_SCORES);
-				}
-			}
-			else if (massagedText.contains("current scores")) {
-				if (massagedText.contains("image")) {
-					postSetlistScoresImage(CURRENT_SCORES);
-				}
-				else {
-					postSetlistScoresText(CURRENT_SCORES);
-				}
-			}
-		}
-	}
-	public void onFavorite(User arg0, User arg1, Status arg2) {}
-	public void onFollow(User arg0, User arg1) {}
-	public void onFriendList(long[] arg0) {}
-	public void onUnblock(User arg0, User arg1) {}
-	public void onUnfavorite(User arg0, User arg1, Status arg2) {}
-	public void onUserListCreation(User arg0, UserList arg1) {}
-	public void onUserListDeletion(User arg0, UserList arg1) {}
-	public void onUserListMemberAddition(User arg0, User arg1, UserList arg2) {}
-	public void onUserListMemberDeletion(User arg0, User arg1, UserList arg2) {}
-	public void onUserListSubscription(User arg0, User arg1, UserList arg2) {}
-	public void onUserListUnsubscription(User arg0, User arg1, UserList arg2) {}
-	public void onUserListUpdate(User arg0, UserList arg1) {}
-	public void onUserProfileUpdate(User arg0) {}
-	*/
+
 	public void postSetlistScoresImage(String tweetMessage) {
 		logger.info("winnerMap size: " + usersMap.size());
 		logger.info(usersMap);
@@ -4572,7 +3331,7 @@ public class Setlist /*implements UserStreamListener*/ {
 			}
 			StringBuilder sb = new StringBuilder();
 			sb.append(message);
-			String winner = "";
+			String winner;
 			Integer score;
 			int count = 0;
 			for (Entry<String, Integer> user : sortedUsersMap.entrySet()) {
@@ -4672,7 +3431,7 @@ public class Setlist /*implements UserStreamListener*/ {
 	}
     
 	public ArrayList<String> getBanList() {
-		ArrayList<String> banList = new ArrayList<String>(0);
+		ArrayList<String> banList;
 		try {
 			FileInputStream fileInputStream = new FileInputStream(banFile);
 		    ObjectInputStream objectInputStream = new ObjectInputStream(
