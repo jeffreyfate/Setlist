@@ -1,14 +1,13 @@
 package com.jeffthefate.setlist;
 
-import java.util.HashMap;
-import java.util.Map.Entry;
-import java.util.TreeMap;
-
-import com.jeffthefate.setlist.Setlist.GameComparator;
-
+import com.jeffthefate.utils.GameComparator;
 import junit.framework.Test;
 import junit.framework.TestCase;
 import junit.framework.TestSuite;
+
+import java.util.HashMap;
+import java.util.Map.Entry;
+import java.util.TreeMap;
 
 public class SortedUsersTest extends TestCase {
 	

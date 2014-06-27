@@ -12,6 +12,11 @@
 			<artifactId>screenshot</artifactId>
 			<version>1.0</version>
 		</dependency>
+        <dependency>
+            <groupId>com.jeffthefate</groupId>
+            <artifactId>utils</artifactId>
+            <version>1.0</version>
+        </dependency>
 		<dependency>
 			<groupId>org.apache.commons</groupId>
 			<artifactId>commons-lang3</artifactId>
