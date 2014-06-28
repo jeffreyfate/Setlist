@@ -7,6 +7,7 @@ import twitter4j.conf.ConfigurationBuilder;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Date;
 
 public class SetlistTest extends TestCase {
 	
@@ -25,7 +26,7 @@ public class SetlistTest extends TestCase {
         setlist = new Setlist("", true, setupDevConfig(), setupDevConfig(),
                 new File("src/test/resources/setlist.jpg").getAbsolutePath(),
                 new File("src/test/resources/roboto.ttf").getAbsolutePath(), 21,
-                70, "", "", "", "D:\\banlist.ser",
+                70, 40, "", "", "", "D:\\banlist.ser",
                 gameUtil.generateSongMatchList(), null, "",
                 "6pJz1oVHAwZ7tfOuvHfQCRz6AVKZzg1itFVfzx2q",
                 "uNZMDvDSahtRxZVRwpUVwzAG9JdLzx4cbYnhYPi7",
@@ -77,97 +78,26 @@ public class SetlistTest extends TestCase {
         setlist.addAnswer("testuser3", gameUtil.massageResponse("smooth " +
                 "rider"));
     }
-	/*
-	public void testUpdateStatus() {
-		Setlist setlist = new Setlist("", 0, true, setupDevConfig(),
-				setupDevConfig(), "", "", 0, 0, "", "", "", null, "");
-		setlist.tweetSong("[TEST] Test message 10", "", null, -1, false);
-		setlist.tweetSong("[ENCORE:] Test message 11", "TEST GAME MESSAGE 11", null, -1, true);
-		setlist.tweetSong("[Final:] Test message 12", "TEST GAME MESSAGE 12", null, -1, true);
-		setlist.tweetSong("Test message 13", "TEST GAME MESSAGE 13", null, -1, true);
-	}
 
-	public void testFullSetlist() {
-		ArrayList<String> symbolList = new ArrayList<String>(0);
-		symbolList.add("*");
-		symbolList.add("+");
-    	symbolList.add("~");
-    	symbolList.add("^");
-    	symbolList.add("§");
-    	symbolList.add("¤");
-    	symbolList.add("$");
-    	symbolList.add("%");
-		Setlist setlist = new Setlist("", 0, true, setupDevConfig(),
-				setupDevConfig(), "D:\\setlist.jpg", "D:\\roboto.ttf", 21, 70,
-				"", "", "", "", null, symbolList, "");
-		setlist.runSetlistCheck("C:\\Users\\Jeff\\Desktop\\testOne.txt");
-	}
-	
-	public void testMassageAnswer() {
-		Setlist setlist = new Setlist("", 0, true, setupDevConfig(),
-				setupDevConfig(), "D:\\setlist.jpg", "D:\\roboto.ttf", 21, 70,
-				"", "", "", "", null, null, "");
-		System.out.println(setlist.massageAnswer("Sister5||"));
-		System.out.println(setlist.massageAnswer("SisterÄ"));
-		System.out.println(setlist.massageAnswer("Sister@"));
-		System.out.println(setlist.massageAnswer("Sister~"));
-	}
+    public void testStripSpecialCharacters() {
+        String testSong = "(Don't Drink The Water)*+5||Ä�~->";
+        String result = setlist.stripSpecialCharacters(testSong);
+        assertEquals("Stripped song not the same!", "Don't Drink The Water",
+                result);
+        testSong = "Fool In The Rain->+%";
+        result = setlist.stripSpecialCharacters(testSong);
+        assertEquals("Stripped song not the same!", "Fool In The Rain%",
+                result);
+    }
 
-	public void testFindWinners() {
-		Setlist setlist = new Setlist("", 0, true, setupDevConfig(),
-				setupDevConfig(), "", "", 0, 0, "", "", "", null, "");
-		setlist.answers.put("jeffthefate", "stolen away on 55th & 3rd b");
-		setlist.createWinnersMessage("Stolen Away On 55th & 3rd",
-				"Current #DMB Song & Setlist: [Stolen Away On 55th & 3rd]");
-	}
+    public void testConvertStringToDate() {
+        Date date = new Date(1404086400000l);
+        Date newDate = setlist.convertStringToDate("MM/dd/yy", "6/30/14");
+        assertEquals("Dates don't match!", date, newDate);
+        assertNull("Date returned not null!", setlist.convertStringToDate
+                (null, null));
+    }
 
-	public void testPostSetlistScores() {
-		Setlist setlist = new Setlist("", 0, true, setupDevConfig(),
-				setupDevConfig(), "D:\\setlist.jpg", "D:\\roboto.ttf", 21, 70,
-				"", "", "", null, null, "");
-		HashMap<String, Integer> winnerMap = new HashMap<String, Integer>(0);
-		winnerMap.put("Copperpot5", 1);
-		winnerMap.put("jeffthefate", 1);
-		winnerMap.put("testersonman", 2);
-		winnerMap.put("testy", 4);
-		winnerMap.put("boydtinsley46", 7);
-		setlist.postSetlistScoresText("[Current Scores]", winnerMap);
-		winnerMap.put("Copperpot5", 3);
-		winnerMap.put("jeffthefate", 4);
-		winnerMap.put("testersonman", 5);
-		winnerMap.put("suckerman", 1);
-		winnerMap.put("testy", 5);
-		winnerMap.put("boydtinsley45", 12);
-		setlist.postSetlistScoresImage("[Final Scores]", "Top Scores",
-				winnerMap);
-	}
-	
-	public void testBanList() {
-		Setlist setlist = new Setlist("", true, setupDevConfig(),
-				setupDevConfig(), "D:\\setlist.jpg", "D:\\roboto.ttf", 21, 70,
-				"", "", "", "D:\\banlist.ser", null, null, "");
-		setlist.addAnswer("jeffthefate", "JTR");
-		setlist.addAnswer("Copperpot5", "JTR");
-		setlist.banUser("jeffthefate");
-		System.out.println(setlist.getBanList());
-		System.out.println(setlist.createWinnersMessage("jtr", "Current Song [JTR]"));
-		setlist.unbanUser("jeffthefate");
-		System.out.println(setlist.getBanList());
-		setlist.addAnswer("jeffthefate", "JTR");
-		setlist.addAnswer("Copperpot5", "JTR");
-		System.out.println(setlist.createWinnersMessage("jtr", "Current Song [JTR]"));
-	}
-
-	public void testObjectIdFromResponse() {
-		Setlist setlist = new Setlist("", true, setupDevConfig(),
-				setupDevConfig(), "D:\\setlist.jpg", "D:\\roboto.ttf", 21, 70,
-				"", "", "", "D:\\banlist.ser", null, null, "",
-                "6pJz1oVHAwZ7tfOuvHfQCRz6AVKZzg1itFVfzx2q",
-                "uNZMDvDSahtRxZVRwpUVwzAG9JdLzx4cbYnhYPi7");
-		String objectId = setlist.getObjectIdFromResponse("{\"results\":[{\"set\":\"Jun 14 2014\\nDave Matthews Band\\nSusquehanna Bank Center\\nCamden, NJ\\n\\nShow begins @ 7:00 pm EDT\",\"setDate\":{\"__type\":\"Date\",\"iso\":\"2014-06-14T00:00:00.000Z\"},\"venue\":{\"__type\":\"Pointer\",\"className\":\"Venue\",\"objectId\":\"sRnwmhzwPP\"},\"plays\":{\"__type\":\"Relation\",\"className\":\"Play\"},\"createdAt\":\"2014-06-14T22:30:31.951Z\",\"updatedAt\":\"2014-06-14T22:30:31.951Z\",\"objectId\":\"UCnjunxzHy\"}]}");
-		System.out.println(objectId);
-	}
-	*/
     public void testLiveSetlist() {
         setlist.liveSetlist("src/test/resources/test.txt");
         ArrayList<String> setList = new ArrayList<String>();
@@ -217,6 +147,15 @@ public class SetlistTest extends TestCase {
         sorted.add("testuser6");
         assertEquals("Sorted maps not equal!", sorted,
                 new ArrayList<String>(setlist.sortUsersMap().keySet()));
+    }
+
+    public void testCreateWinnersMessage() {
+        addLotsAnswers();
+        String message = setlist.createWinnersMessage("Ill Back You UpÄ",
+                "Current #DMB Song & Setlist: [Ill Back You UpÄ]");
+        assertEquals("Winners message not correct!", "\n" +
+                "Correct guesses:\n#1 - @jeffthefate (1)\n" +
+                "#2 - @testuser1 (1)\n#3 - @testuser2 (1)", message);
     }
 
     public void testSortUsersMapEmpty() {
