@@ -27,8 +27,8 @@ public class SetlistTest extends TestCase {
                 new File("src/test/resources/setlist.jpg").getAbsolutePath(),
                 new File("src/test/resources/roboto.ttf").getAbsolutePath(), 21,
                 70, 40, "", "", "", "D:\\banlist.ser",
-                gameUtil.generateSongMatchList(), null, "",
-                "6pJz1oVHAwZ7tfOuvHfQCRz6AVKZzg1itFVfzx2q",
+                gameUtil.generateSongMatchList(), gameUtil.generateSymbolList(),
+                "", "6pJz1oVHAwZ7tfOuvHfQCRz6AVKZzg1itFVfzx2q",
                 "uNZMDvDSahtRxZVRwpUVwzAG9JdLzx4cbYnhYPi7",
                 "target/" + getName() + "Setlist",
                 "target/" + getName() + "Scores");
@@ -203,4 +203,5 @@ public class SetlistTest extends TestCase {
         assertEquals("Winner lists don't match!", winners,
                 setlist.findWinners("Ill Back You UpÄ"));
     }
+
 }

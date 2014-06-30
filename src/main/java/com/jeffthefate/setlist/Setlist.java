@@ -941,6 +941,9 @@ public class Setlist {
             // 0 if a new setlist (latest)
             // 1 if there is a newer date available already
             int newDate = uploadLatest(setlistText);
+            if (newDate == -2) {
+                return;
+            }
             Venue venue = jsonUtil.getVenue(parse.getObject("Venue",
                     getVenueId()));
             setVenueCity(venue.getCity());
@@ -1061,6 +1064,7 @@ public class Setlist {
             String dateString) {
         Date date = convertStringToDate(fromFormat, dateString);
         SimpleDateFormat dateFormat = new SimpleDateFormat(toFormat);
+        dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
         return dateFormat.format(date.getTime());
     }
 
@@ -1082,7 +1086,7 @@ public class Setlist {
         String response;
         try {
             response = parse.get("Setlist", URLEncoder.encode
-                    ("where={\"setDate\":{\"__type\":\"Date\",\"iso\":\"" +
+                    ("?where={\"setDate\":{\"__type\":\"Date\",\"iso\":\"" +
                                     dateString + "\"}}", "US-ASCII"));
             return response;
         } catch (UnsupportedEncodingException e) {
@@ -1184,11 +1188,11 @@ public class Setlist {
     private int uploadLatest(String latestSetlist) {
         String dateString = convertDateFormat(SETLIST_DATE_FORMAT,
                 PARSE_DATE_FORMAT, locList.get(0));
-        String getSetlistResponse = getSetlist(latestSetlist);
+        String getSetlistResponse = getSetlist(dateString);
         if (getSetlistResponse == null) {
             logger.info("Fetch setlist from Parse failed!");
             logger.info(latestSetlist);
-            return -1;
+            return -2;
         }
         String venueJson = createVenueJson();
         SetlistResults setlistResults = jsonUtil.getSetlistResults(
