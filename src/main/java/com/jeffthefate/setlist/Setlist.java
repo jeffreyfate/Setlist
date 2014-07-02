@@ -189,8 +189,8 @@ public class Setlist {
     		int topOffset, int bottomOffset, String setlistFilename,
             String lastSongFilename, String setlistDir, String banFile,
     		ArrayList<ArrayList<String>> nameList,
-    		ArrayList<String> symbolList, String currAccount, String appId,
-            String restKey, String setlistImageName, String scoresImageName) {
+    		ArrayList<String> symbolList, String currAccount,
+            Parse parse, String setlistImageName, String scoresImageName) {
     	this.url = url;
     	this.isDev = isDev;
     	this.setlistConfig = setlistConfig;
@@ -209,7 +209,7 @@ public class Setlist {
     	this.currAccount = currAccount;
         this.setlistImageName = setlistImageName;
         this.scoresImageName = scoresImageName;
-        parse = new Parse(appId, restKey);
+        this.parse = parse;
     }
 
     public void setUrl(String url) {
@@ -1402,24 +1402,24 @@ public class Setlist {
     }
 
     public void banUser(String user) {
-    	List<String> banList = fileUtil.readFromFile(banFile);
+    	List<String> banList = fileUtil.readListFromFile(banFile);
     	if (!banList.contains(user)) {
     		banList.add(user);
     	}
-    	if (!fileUtil.saveToFile(banFile, banList)) {
+    	if (!fileUtil.saveListToFile(banFile, banList)) {
 			twitterUtil.sendDirectMessage(gameConfig, "Copperpot5",
                     "Failed banning user: " + user);
 		}
     }
     
     public void unbanUser(String user) {
-    	List<String> banList = fileUtil.readFromFile(banFile);
+    	List<String> banList = fileUtil.readListFromFile(banFile);
 		for (int i = 0; i < banList.size(); i++) {
 			if (user.equalsIgnoreCase(banList.get(i))) {
 				banList.remove(i);
 			}
 		}
-		if (!fileUtil.saveToFile(banFile, banList)) {
+		if (!fileUtil.saveListToFile(banFile, banList)) {
             twitterUtil.sendDirectMessage(gameConfig, "Copperpot5",
                     "Failed unbanning user: " + user);
 		}
@@ -1453,7 +1453,7 @@ public class Setlist {
         TreeMap<String, Integer> sortedUsersMap =
                 new TreeMap<String, Integer>(gameComparator);
         sortedUsersMap.putAll(usersMap);
-        List<String> banList = fileUtil.readFromFile(banFile);
+        List<String> banList = fileUtil.readListFromFile(banFile);
         for (String user : usersMap.keySet()) {
             if (banList.contains(user.toLowerCase(Locale.getDefault()))) {
                 sortedUsersMap.remove(user);
@@ -1510,7 +1510,7 @@ public class Setlist {
         boolean responseMatches;
         boolean isCorrect;
 
-        List<String> banList = fileUtil.readFromFile(banFile);
+        List<String> banList = fileUtil.readListFromFile(banFile);
 
         for (Entry<String, String> answer : answers.entrySet()) {
             if (banList.contains(answer.getKey().toLowerCase(
