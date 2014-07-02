@@ -2,21 +2,15 @@ package com.jeffthefate.setlist;
 
 import com.jeffthefate.utils.CredentialUtil;
 import com.jeffthefate.utils.GameUtil;
+import com.jeffthefate.utils.Parse;
 import junit.framework.TestCase;
 import twitter4j.conf.Configuration;
-import twitter4j.conf.ConfigurationBuilder;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Date;
 
 public class SetlistTest extends TestCase {
-	
-	private static final String DEV_KEY = "BXx60ptC4JAMBQLQ965H3g";
-	private static final String DEV_SECRET = "0ivTqB1HKqQ6t7HQhIl0tTUNk8uRnv1nhDqyFXBw";
-	private static final String DEV_ACCESS_TOKEN = "1265342035-6mYSoxlw8NuZSdWX0AS6cpIu3We2CbCev6rbKUQ";
-	private static final String DEV_ACCESS_SECRET = "XqxxE4qLUK3wJ4LHlIbcSP1m6G4spZVmCDdu5RLuU";
-	private static final String DEV_ACCOUNT = "dmbtriviatest";
 
     private Setlist setlist;
     private GameUtil gameUtil;
@@ -26,25 +20,18 @@ public class SetlistTest extends TestCase {
         super.setUp();
         gameUtil = GameUtil.instance();
         credentialUtil = CredentialUtil.instance();
-        setlist = new Setlist("", true, setupDevConfig(), setupDevConfig(),
+        Parse parse = credentialUtil.getCredentialedParse(true);
+        Configuration configuration = credentialUtil.getCredentialedTwitter(
+                parse, false);
+        setlist = new Setlist("", true, configuration, configuration,
                 new File("src/test/resources/setlist.jpg").getAbsolutePath(),
                 new File("src/test/resources/roboto.ttf").getAbsolutePath(), 21,
                 70, 40, "", "", "", "D:\\banlist.ser",
                 gameUtil.generateSongMatchList(), gameUtil.generateSymbolList(),
-                "", credentialUtil.getCredentialedParse(true),
-                "target/" + getName() + "Setlist",
+                "", parse, "target/" + getName() + "Setlist",
                 "target/" + getName() + "Scores");
     }
-	
-	private Configuration setupDevConfig() {
-		ConfigurationBuilder cb = new ConfigurationBuilder();
-		cb.setDebugEnabled(true)
-		  .setOAuthConsumerKey(DEV_KEY)
-		  .setOAuthConsumerSecret(DEV_SECRET)
-		  .setOAuthAccessToken(DEV_ACCESS_TOKEN)
-		  .setOAuthAccessTokenSecret(DEV_ACCESS_SECRET);
-		return cb.build();
-	}
+
 
     private void addAnswers() {
         setlist.addAnswer("jeffthefate", gameUtil.massageResponse("IBYU"));
