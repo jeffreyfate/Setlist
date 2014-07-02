@@ -1,12 +1,12 @@
 package com.jeffthefate.setlist;
 
-import com.jeffthefate.Screenshot;
 import com.jeffthefate.SetlistScreenshot;
 import com.jeffthefate.TriviaScreenshot;
 import com.jeffthefate.utils.*;
 import com.jeffthefate.utils.json.JsonUtil;
 import com.jeffthefate.utils.json.SetlistResults;
 import com.jeffthefate.utils.json.Venue;
+import com.jeffthefate.utils.json.VenueResults;
 import org.apache.commons.lang3.StringEscapeUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpResponse;
@@ -38,7 +38,6 @@ import twitter4j.conf.Configuration;
 
 import javax.net.ssl.SSLContext;
 import java.io.File;
-import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
@@ -63,7 +62,7 @@ public class Setlist {
     
     private String currDateString = null;
     
-    private Screenshot screenshot;
+    private SetlistScreenshot screenshot;
 
     private String url;
     private int durationHours = 5;
@@ -76,11 +75,36 @@ public class Setlist {
     private int fontSize;
     private int topOffset;
     private int bottomOffset;
+
+    public String getSetlistFilename() {
+        return setlistFilename;
+    }
+
+    public void setSetlistFilename(String setlistFilename) {
+        this.setlistFilename = setlistFilename;
+    }
+
+    public String getLastSongFilename() {
+        return lastSongFilename;
+    }
+
+    public void setLastSongFilename(String lastSongFilename) {
+        this.lastSongFilename = lastSongFilename;
+    }
+
     private String setlistFilename;
     private String lastSongFilename;
     private String setlistDir;
     private String banFile;
-    
+
+    public Configuration getSetlistConfig() {
+        return setlistConfig;
+    }
+
+    public void setSetlistConfig(Configuration setlistConfig) {
+        this.setlistConfig = setlistConfig;
+    }
+
     private Configuration setlistConfig;
     private Configuration gameConfig;
     
@@ -126,6 +150,38 @@ public class Setlist {
     private String scoresImageName;
 
     private Parse parse;
+
+    public String getSetlistJpgFilename() {
+        return setlistJpgFilename;
+    }
+
+    public void setSetlistJpgFilename(String setlistJpgFilename) {
+        this.setlistJpgFilename = setlistJpgFilename;
+    }
+
+    public String getFontFilename() {
+        return fontFilename;
+    }
+
+    public void setFontFilename(String fontFilename) {
+        this.fontFilename = fontFilename;
+    }
+
+    public String getSetlistDir() {
+        return setlistDir;
+    }
+
+    public void setSetlistDir(String setlistDir) {
+        this.setlistDir = setlistDir;
+    }
+
+    public String getBanFile() {
+        return banFile;
+    }
+
+    public void setBanFile(String banFile) {
+        this.banFile = banFile;
+    }
 
     public Setlist(String url, boolean isDev,
     		Configuration setlistConfig, Configuration gameConfig,
@@ -220,11 +276,22 @@ public class Setlist {
     /**************************************************************************/
     /*                                Startup                                 */
     /**************************************************************************/
-    public void startSetlist() {
+    public void startSetlist(ArrayList<String> files) {
     	logger.info("Starting setlist...");
     	long endTime = System.currentTimeMillis() + duration;
     	inSetlist = true;
+        int waitNum = 0;
     	do {
+            if (waitNum == 0) {
+                waitNum = 3;
+            }
+            if (files != null && waitNum == 3) {
+                if (files.isEmpty()) {
+                    break;
+                }
+                setUrl("src/test/resources/set/" + files.remove(0));
+            }
+            waitNum--;
     		runSetlistCheck(url);
     		try {
 				Thread.sleep(10000);
@@ -238,6 +305,7 @@ public class Setlist {
     		screenshot = new SetlistScreenshot(setlistJpgFilename, fontFilename,
     				setlistText, fontSize, topOffset, bottomOffset,
                     setlistImageName);
+            screenshot.createScreenshot();
             twitterUtil.updateStatus(setlistConfig, finalTweetText,
                     new File(screenshot.getOutputFilename()), -1);
     		postSetlistScoresImage(true);
@@ -357,7 +425,7 @@ public class Setlist {
         song = StringUtils.remove(song, "�");
         song = StringUtils.remove(song, "Ä");
         song = StringUtils.remove(song, "5||");
-        song = StringUtils.trim(song);
+        song = StringUtils.strip(song);
         return song;
     }
 
@@ -371,6 +439,7 @@ public class Setlist {
         char badChar = 65533;
         char apos = 39;
         char endChar = 160;
+        String badTranslation = "ï¿½";
         boolean hasEncore = false;
         boolean hasSegue = false;
         boolean firstBreak = false;
@@ -401,7 +470,7 @@ public class Setlist {
                         for (Node locNode : node.childNodes()) {
                             if (!(locNode instanceof Comment)) {
                                 if (locNode instanceof TextNode) {
-                                    locList.add(StringUtils.trim(
+                                    locList.add(StringUtils.strip(
                                             ((TextNode)locNode).text()));
                                 }
                             }
@@ -435,6 +504,8 @@ public class Setlist {
                                     if (songs.length > 1) {
                                         currSong = StringUtils.replaceChars(
                                                 songs[1], badChar, apos);
+                                        currSong = StringUtils.replaceChars(
+                                                currSong, badTranslation, "'");
                                         Elements imgs =
                                                 div.getElementsByTag("img");
                                         if (!imgs.isEmpty()) {
@@ -475,18 +546,18 @@ public class Setlist {
                                                             noteMap.put(
                                                                     divStyleLocation,
                                                                     oldNote.concat(
-                                                                            StringUtils.trim(
+                                                                            StringUtils.strip(
                                                                                     nodeText)));
                                                         noteList.set(
                                                                 noteList.size()-1,
                                                                 noteList.get(
                                                                         noteList.size()-1)
                                                                         .concat(
-                                                                                StringUtils.trim(nodeText)));
+                                                                                StringUtils.strip(nodeText)));
                                                     }
                                                     else {
                                                         String noteText =
-                                                                StringUtils.trim(
+                                                                StringUtils.strip(
                                                                         nodeText);
                                                         if (noteText
                                                                 .toLowerCase()
@@ -514,12 +585,12 @@ public class Setlist {
                                                                     noteMap.put(
                                                                             divStyleLocation,
                                                                             oldNote.concat(
-                                                                                    StringUtils.trim(nodeText)));
+                                                                                    StringUtils.strip(nodeText)));
                                                                 noteList.set(
                                                                         noteList.size()-1,
                                                                         noteList.get(
                                                                                 noteList.size()-1).concat(
-                                                                                StringUtils.trim(nodeText)));
+                                                                                StringUtils.strip(nodeText)));
                                                             }
                                                             else if (firstPartial ||
                                                                     lastPartial) {
@@ -530,12 +601,12 @@ public class Setlist {
                                                                     noteMap.put(
                                                                             divStyleLocation,
                                                                             oldNote.concat(
-                                                                                    StringUtils.trim(nodeText)));
+                                                                                    StringUtils.strip(nodeText)));
                                                                 noteList.set(
                                                                         noteList.size()-1,
                                                                         noteList.get(
                                                                                 noteList.size()-1).concat(
-                                                                                StringUtils.trim(nodeText)));
+                                                                                StringUtils.strip(nodeText)));
                                                             }
                                                             else {
                                                                 logger.info(
@@ -545,12 +616,12 @@ public class Setlist {
                                                                     noteMap.put(
                                                                             divStyleLocation,
                                                                             oldNote.concat(
-                                                                                    StringUtils.trim(nodeText)));
+                                                                                    StringUtils.strip(nodeText)));
                                                                 noteList.add(
-                                                                        StringUtils.trim(
+                                                                        StringUtils.strip(
                                                                                 nodeText));
                                                                 logger.info(
-                                                                        StringUtils.trim(
+                                                                        StringUtils.strip(
                                                                                 nodeText));
                                                             }
                                                         }
@@ -589,7 +660,7 @@ public class Setlist {
                                                                         divStyleLocation,
                                                                         oldNote.concat("\n")
                                                                                 .concat(
-                                                                                        StringUtils.trim(fontText)));
+                                                                                        StringUtils.strip(fontText)));
                                                             noteList.add(
                                                                     fontText);
                                                             logger.info(fontText);
@@ -602,13 +673,13 @@ public class Setlist {
                                                                 noteMap.put(
                                                                         divStyleLocation,
                                                                         oldNote.concat(
-                                                                                StringUtils.trim(fontText)
+                                                                                StringUtils.strip(fontText)
                                                                                         .concat(" ")));
                                                             noteList.set(
                                                                     noteList.size()-1,
                                                                     noteList.get(
                                                                             noteList.size()-1).concat(
-                                                                            StringUtils.trim(fontText)
+                                                                            StringUtils.strip(fontText)
                                                                                     .concat(" ")));
                                                         } else {
                                                             hasGuest = true;
@@ -619,7 +690,7 @@ public class Setlist {
                                                                 noteMap.put(
                                                                         divStyleLocation,
                                                                         oldNote.concat(
-                                                                                StringUtils.trim(fontText)
+                                                                                StringUtils.strip(fontText)
                                                                                         .concat(" ")));
                                                             noteList.add(
                                                                     fontText.concat(" "));
@@ -648,6 +719,8 @@ public class Setlist {
                         // Add the song
                         currSong = StringUtils.replaceChars(
                                 songs[1], badChar, apos);
+                        currSong = StringUtils.strip(StringUtils.replaceChars(
+                                currSong, badTranslation, "'"));
                         setList.add(currSong);
                         logger.info(currSong);
                         lastSong = currSong;
@@ -690,7 +763,7 @@ public class Setlist {
                                     if (hasSegue)
                                         noteList.set(noteList.size()-1,
                                                 noteList.get(noteList.size()-1)
-                                                        .concat(StringUtils.trim(
+                                                        .concat(StringUtils.strip(
                                                                 nodeText)));
                                     else {
                                         // If a guest has been found via the
@@ -700,16 +773,16 @@ public class Setlist {
                                         if (hasGuest)
                                             noteList.set(noteList.size()-1,
                                                     noteList.get(noteList.size()-1)
-                                                            .concat(StringUtils.trim(
+                                                            .concat(StringUtils.strip(
                                                                     nodeText)));
                                             // Everything else is just added as a
                                             // new item in the list
                                             // Sometimes there is a double break
                                             // between notes, so reset breaks value
                                         else {
-                                            noteList.add(StringUtils.trim(
+                                            noteList.add(StringUtils.strip(
                                                     nodeText));
-                                            logger.info(StringUtils.trim(
+                                            logger.info(StringUtils.strip(
                                                     nodeText));
                                             breaks = 0;
                                         }
@@ -788,7 +861,7 @@ public class Setlist {
                 }
             }
             for (Entry<Integer, String> song : songMap.entrySet()) {
-                currSong = song.getValue();
+                currSong = StringUtils.strip(song.getValue());
                 setList.add(currSong);
                 logger.info(currSong);
                 lastSong = currSong;
@@ -924,9 +997,9 @@ public class Setlist {
         setlistText = sb.toString();
         logger.info(setlistText);
         String setlistFile = setlistFilename +
-                (currDateString.replace('/', '_')) + ".txt";
+                (currDateString.replace('/', '_').replace(':', '_')) + ".txt";
         String lastSongFile = lastSongFilename +
-                (currDateString.replace('/', '_')) + ".txt";
+                (currDateString.replace('/', '_').replace(':', '_')) + ".txt";
         String lastSetlist = fileUtil.readStringFromFile(setlistFile);
         logger.info("lastSetlist:");
         logger.info(lastSetlist);
@@ -982,6 +1055,7 @@ public class Setlist {
 		    				setlistJpgFilename, fontFilename, setlistText,
 		    				fontSize, topOffset, bottomOffset,
                             setlistImageName);
+                    screenshot.createScreenshot();
 	                tweetSong(sb.toString(), gameMessage,
                             new File(screenshot.getOutputFilename()), -1, true);
             	}
@@ -1048,6 +1122,7 @@ public class Setlist {
         if (format == null || dateString == null) {
             return null;
         }
+        dateString = dateString.replace('_', ':');
     	SimpleDateFormat dateFormat = new SimpleDateFormat(format);
         dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
     	Date date = null;
@@ -1083,14 +1158,23 @@ public class Setlist {
         if (dateString == null) {
             return null;
         }
-        String response;
+        return parse.get("Setlist", "?where=" +
+                createGetSetlistJson(dateString));
+    }
+
+    private String createGetSetlistJson(String dateString) {
+        JsonNodeFactory factory = JsonNodeFactory.instance;
+        ObjectNode rootNode = factory.objectNode();
+        ObjectNode dateNode = factory.objectNode();
+        dateNode.put("__type", "Date");
+        dateNode.put("iso", dateString);
+        rootNode.put("setDate", dateNode);
         try {
-            response = parse.get("Setlist", URLEncoder.encode
-                    ("?where={\"setDate\":{\"__type\":\"Date\",\"iso\":\"" +
-                                    dateString + "\"}}", "US-ASCII"));
-            return response;
+            return URLEncoder.encode(rootNode.toString(), "UTF-8").replace("+",
+                    "%20").replace("-", "%2D");
         } catch (UnsupportedEncodingException e) {
-            logger.error("Bad data!");
+            logger.error("Unable to encode where clause!");
+            e.printStackTrace();
             return null;
         }
     }
@@ -1198,22 +1282,23 @@ public class Setlist {
         SetlistResults setlistResults = jsonUtil.getSetlistResults(
                 getSetlistResponse);
         if (setlistResults.getResults().isEmpty()) {
-            Venue venue = jsonUtil.getVenue(getResponse("Venue", 1,
-                    venueJson));
-            String venueId = venue.getObjectId();
-        	if (venueId == null) {
+            VenueResults venueResults = jsonUtil.getVenueResults(
+                    getResponse("Venue", 1, venueJson));
+            Venue venue;
+            String venueId;
+            if (venueResults.getResults().isEmpty()) {
                 venue = jsonUtil.getVenue(parse.post("Venue", venueJson));
-                venueId = venue.getObjectId();
-        	}
+                venue.setName(locList.get(2));
+                venue.setCity(locList.get(3));
+            }
+            else {
+                venue = venueResults.getResults().get(0);
+            }
+            venueId = venue.getObjectId();
         	if (!isDev) {
         		postSetlist(createSetlistJsonString(latestSetlist, venueId));
         	}
-            File dir = new File(setlistDir);
-            String[] files = dir.list(new FilenameFilter() {
-            	public boolean accept(File dir, String filename) {
-            		return filename.endsWith(".txt");
-        		}
-        	});
+            List<String> files = fileUtil.getListOfFiles(setlistDir, ".txt");
             Date newDate = convertStringToDate(PARSE_DATE_FORMAT, dateString);
             for (String file : files) {
             	if (file.startsWith("setlist")) {
@@ -1347,6 +1432,7 @@ public class Setlist {
                     setlistJpgFilename, fontFilename, "Top Scores",
                     sortedUsersMap, 60, 30, 10, topOffset, bottomOffset,
                     scoresImageName);
+            gameScreenshot.createScreenshot();
             twitterUtil.updateStatus(gameConfig, isFinal ? FINAL_SCORES_TEXT :
                             CURRENT_SCORES_TEXT,
                     new File(gameScreenshot.getOutputFilename()), -1);
