@@ -14,12 +14,11 @@ public class SetlistTest extends TestCase {
 
     private Setlist setlist;
     private GameUtil gameUtil;
-    private CredentialUtil credentialUtil;
 
     public void setUp() throws Exception {
         super.setUp();
         gameUtil = GameUtil.instance();
-        credentialUtil = CredentialUtil.instance();
+        CredentialUtil credentialUtil = CredentialUtil.instance();
         Parse parse = credentialUtil.getCredentialedParse(true);
         Configuration configuration = credentialUtil.getCredentialedTwitter(
                 parse, false);
@@ -89,7 +88,7 @@ public class SetlistTest extends TestCase {
 
     public void testLiveSetlist() {
         setlist.liveSetlist("src/test/resources/test.txt");
-        ArrayList<String> setList = new ArrayList<String>();
+        ArrayList<String> setList = new ArrayList<>();
         setList.add("Beach Ball*");
         setList.add("Bartender+");
         setList.add("Slip Slidin Away~");
@@ -113,7 +112,7 @@ public class SetlistTest extends TestCase {
         setList.add("Dancing Nancies ->");
         setList.add("Warehouse");
         assertEquals("Set lists are not equal!", setList, setlist.getSetList());
-        ArrayList<String> noteList = new ArrayList<String>();
+        ArrayList<String> noteList = new ArrayList<>();
         noteList.add("Notes:");
         noteList.add("Ä Carter, Dave, Stefan and Tim");
         noteList.add("+ Dave And Tim");
@@ -127,7 +126,7 @@ public class SetlistTest extends TestCase {
     public void testSortUsersMap() {
         addLotsAnswers();
         setlist.findWinners("Ill Back You UpÄ");
-        ArrayList<String> sorted = new ArrayList<String>(0);
+        ArrayList<String> sorted = new ArrayList<>(0);
         sorted.add("jeffthefate");
         sorted.add("testuser1");
         sorted.add("testuser2");
@@ -135,7 +134,7 @@ public class SetlistTest extends TestCase {
         sorted.add("testuser5");
         sorted.add("testuser6");
         assertEquals("Sorted maps not equal!", sorted,
-                new ArrayList<String>(setlist.sortUsersMap().keySet()));
+                new ArrayList<>(setlist.sortUsersMap().keySet()));
     }
 
     public void testCreateWinnersMessage() {
@@ -149,9 +148,9 @@ public class SetlistTest extends TestCase {
 
     public void testSortUsersMapEmpty() {
         setlist.findWinners("Ill Back You UpÄ");
-        ArrayList<String> sorted = new ArrayList<String>(0);
+        ArrayList<String> sorted = new ArrayList<>(0);
         assertEquals("Sorted maps not equal!", sorted,
-                new ArrayList<String>(setlist.sortUsersMap().keySet()));
+                new ArrayList<>(setlist.sortUsersMap().keySet()));
     }
 
     public void testCreatePlayersMessage() {
@@ -178,7 +177,7 @@ public class SetlistTest extends TestCase {
 
     public void testFindWinnersCorrect() {
         addAnswers();
-        ArrayList<String> winners = new ArrayList<String>(0);
+        ArrayList<String> winners = new ArrayList<>(0);
         winners.add("jeffthefate");
         winners.add("testuser1");
         winners.add("testuser2");
@@ -188,7 +187,7 @@ public class SetlistTest extends TestCase {
 
     public void testFindWinnersIncorrect() {
         addIncorrectAnswers();
-        ArrayList<String> winners = new ArrayList<String>(0);
+        ArrayList<String> winners = new ArrayList<>(0);
         assertEquals("Winner lists don't match!", winners,
                 setlist.findWinners("Ill Back You UpÄ"));
     }

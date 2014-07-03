@@ -76,34 +76,10 @@ public class Setlist {
     private int topOffset;
     private int bottomOffset;
 
-    public String getSetlistFilename() {
-        return setlistFilename;
-    }
-
-    public void setSetlistFilename(String setlistFilename) {
-        this.setlistFilename = setlistFilename;
-    }
-
-    public String getLastSongFilename() {
-        return lastSongFilename;
-    }
-
-    public void setLastSongFilename(String lastSongFilename) {
-        this.lastSongFilename = lastSongFilename;
-    }
-
     private String setlistFilename;
     private String lastSongFilename;
     private String setlistDir;
     private String banFile;
-
-    public Configuration getSetlistConfig() {
-        return setlistConfig;
-    }
-
-    public void setSetlistConfig(Configuration setlistConfig) {
-        this.setlistConfig = setlistConfig;
-    }
 
     private Configuration setlistConfig;
     private Configuration gameConfig;
@@ -151,6 +127,35 @@ public class Setlist {
 
     private Parse parse;
 
+    public Setlist(String url, boolean isDev,
+    		Configuration setlistConfig, Configuration gameConfig,
+    		String setlistJpgFilename, String fontFilename, int fontSize,
+    		int topOffset, int bottomOffset, String setlistFilename,
+            String lastSongFilename, String setlistDir, String banFile,
+    		ArrayList<ArrayList<String>> nameList,
+    		ArrayList<String> symbolList, String currAccount,
+            Parse parse, String setlistImageName, String scoresImageName) {
+    	this.url = url;
+    	this.isDev = isDev;
+    	this.setlistConfig = setlistConfig;
+    	this.gameConfig = gameConfig;
+    	this.setlistJpgFilename = setlistJpgFilename;
+    	this.fontFilename = fontFilename;
+    	this.fontSize = fontSize;
+    	this.topOffset = topOffset;
+        this.bottomOffset = bottomOffset;
+    	this.setlistFilename = setlistFilename;
+    	this.lastSongFilename = lastSongFilename;
+    	this.setlistDir = setlistDir;
+    	this.banFile = banFile;
+    	this.nameList = nameList;
+    	this.symbolList = symbolList;
+    	this.currAccount = currAccount;
+        this.setlistImageName = setlistImageName;
+        this.scoresImageName = scoresImageName;
+        this.parse = parse;
+    }
+
     public String getSetlistJpgFilename() {
         return setlistJpgFilename;
     }
@@ -183,33 +188,28 @@ public class Setlist {
         this.banFile = banFile;
     }
 
-    public Setlist(String url, boolean isDev,
-    		Configuration setlistConfig, Configuration gameConfig,
-    		String setlistJpgFilename, String fontFilename, int fontSize,
-    		int topOffset, int bottomOffset, String setlistFilename,
-            String lastSongFilename, String setlistDir, String banFile,
-    		ArrayList<ArrayList<String>> nameList,
-    		ArrayList<String> symbolList, String currAccount,
-            Parse parse, String setlistImageName, String scoresImageName) {
-    	this.url = url;
-    	this.isDev = isDev;
-    	this.setlistConfig = setlistConfig;
-    	this.gameConfig = gameConfig;
-    	this.setlistJpgFilename = setlistJpgFilename;
-    	this.fontFilename = fontFilename;
-    	this.fontSize = fontSize;
-    	this.topOffset = topOffset;
-        this.bottomOffset = bottomOffset;
-    	this.setlistFilename = setlistFilename;
-    	this.lastSongFilename = lastSongFilename;
-    	this.setlistDir = setlistDir;
-    	this.banFile = banFile;
-    	this.nameList = nameList;
-    	this.symbolList = symbolList;
-    	this.currAccount = currAccount;
-        this.setlistImageName = setlistImageName;
-        this.scoresImageName = scoresImageName;
-        this.parse = parse;
+    public String getSetlistFilename() {
+        return setlistFilename;
+    }
+
+    public void setSetlistFilename(String setlistFilename) {
+        this.setlistFilename = setlistFilename;
+    }
+
+    public String getLastSongFilename() {
+        return lastSongFilename;
+    }
+
+    public void setLastSongFilename(String lastSongFilename) {
+        this.lastSongFilename = lastSongFilename;
+    }
+
+    public Configuration getSetlistConfig() {
+        return setlistConfig;
+    }
+
+    public void setSetlistConfig(Configuration setlistConfig) {
+        this.setlistConfig = setlistConfig;
     }
 
     public void setUrl(String url) {
@@ -361,7 +361,7 @@ public class Setlist {
                             "ASPSESSIONIDSSDRTSRA=HJBPPKFCJGEJKGNEMJJMAIPN");
 
             List<NameValuePair> nameValuePairs =
-                    new ArrayList<NameValuePair>();
+                    new ArrayList<>();
             nameValuePairs.add(new BasicNameValuePair("the_url", ""));
             nameValuePairs.add(new BasicNameValuePair("form_action", "login"));
             nameValuePairs.add(new BasicNameValuePair("Username", "fateman"));
@@ -429,6 +429,7 @@ public class Setlist {
         return song;
     }
 
+    // TODO Break this up?
     public String liveSetlist(String url) {
         final String SETLIST_STYLE = "font-family:sans-serif;font-size:14;"
                 + "font-weight:normal;margin-top:15px;margin-left:15px;";
@@ -928,7 +929,7 @@ public class Setlist {
         logger.info("Old symbols:");
         logger.info(setList);
 		String noteChar;
-		ArrayList<String> newSymbols = new ArrayList<String>(setList);
+		ArrayList<String> newSymbols = new ArrayList<>(setList);
 		for (int i = 0; i < newSymbols.size(); i++) {
 			if (newSymbols.get(i).contains("5||")) {
 				noteChar = "5||";
@@ -1391,7 +1392,7 @@ public class Setlist {
         final String CORRECT_ANSWERS_TEXT = "\nCorrect guesses:";
         List<String> winners = findWinners(lastSong);
         answers.clear();
-        answers = new LinkedHashMap<String, String>();
+        answers = new LinkedHashMap<>();
         return createPlayersMessage(winners, usersMap, songMessage,
                 CORRECT_ANSWERS_TEXT);
     }
@@ -1441,7 +1442,7 @@ public class Setlist {
 	
 	public void postSetlistScoresText(boolean isFinal) {
 		if (!usersMap.isEmpty()) {
-            List<String> winners = new ArrayList<String>(usersMap.keySet());
+            List<String> winners = new ArrayList<>(usersMap.keySet());
             String message = createPlayersMessage(winners, usersMap,
                     isFinal ? FINAL_SCORES_TEXT : CURRENT_SCORES_TEXT, "");
             twitterUtil.updateStatus(gameConfig, message, null, -1);
@@ -1451,7 +1452,7 @@ public class Setlist {
     public TreeMap<String, Integer> sortUsersMap() {
         GameComparator gameComparator = new GameComparator(usersMap);
         TreeMap<String, Integer> sortedUsersMap =
-                new TreeMap<String, Integer>(gameComparator);
+                new TreeMap<>(gameComparator);
         sortedUsersMap.putAll(usersMap);
         List<String> banList = fileUtil.readListFromFile(banFile);
         for (String user : usersMap.keySet()) {
@@ -1502,7 +1503,7 @@ public class Setlist {
     }
 
     public List<String> findWinners(String lastSong) {
-        List<String> winners = new ArrayList<String>(0);
+        List<String> winners = new ArrayList<>(0);
 
         lastSong = gameUtil.massageAnswer(lastSong);
 

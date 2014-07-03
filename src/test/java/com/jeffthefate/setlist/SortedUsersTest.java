@@ -20,10 +20,9 @@ public class SortedUsersTest extends TestCase {
 	}
 	
 	public void testSortedUsers() {
-		HashMap<String, Integer> usersMap = new HashMap<String, Integer>(0);
+		HashMap<String, Integer> usersMap = new HashMap<>(0);
 		TreeMap<String, Integer> sortedUsersMap =
-	    		new TreeMap<String, Integer>(
-	    				new GameComparator(usersMap));
+	    		new TreeMap<>(new GameComparator(usersMap));
 		usersMap.put("jeffthefate", 5);
 		usersMap.put("copperpot5", 2);
 		usersMap.put("tjapple", 3);
