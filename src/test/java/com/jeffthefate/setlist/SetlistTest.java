@@ -1,6 +1,5 @@
 package com.jeffthefate.setlist;
 
-import com.jeffthefate.utils.CredentialUtil;
 import com.jeffthefate.utils.GameUtil;
 import junit.framework.TestCase;
 import twitter4j.conf.Configuration;
@@ -20,18 +19,17 @@ public class SetlistTest extends TestCase {
 
     private Setlist setlist;
     private GameUtil gameUtil;
-    private CredentialUtil credentialUtil;
 
     public void setUp() throws Exception {
         super.setUp();
         gameUtil = GameUtil.instance();
-        credentialUtil = CredentialUtil.instance();
         setlist = new Setlist("", true, setupDevConfig(), setupDevConfig(),
                 new File("src/test/resources/setlist.jpg").getAbsolutePath(),
                 new File("src/test/resources/roboto.ttf").getAbsolutePath(), 21,
                 70, 40, "", "", "", "D:\\banlist.ser",
                 gameUtil.generateSongMatchList(), gameUtil.generateSymbolList(),
-                "", credentialUtil.getCredentialedParse(true),
+                "", "6pJz1oVHAwZ7tfOuvHfQCRz6AVKZzg1itFVfzx2q",
+                "uNZMDvDSahtRxZVRwpUVwzAG9JdLzx4cbYnhYPi7",
                 "target/" + getName() + "Setlist",
                 "target/" + getName() + "Scores");
     }
