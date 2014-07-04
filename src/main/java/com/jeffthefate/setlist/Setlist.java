@@ -72,9 +72,14 @@ public class Setlist {
     
     private String setlistJpgFilename;
     private String fontFilename;
-    private int fontSize;
-    private int topOffset;
-    private int bottomOffset;
+    private int setlistFontSize;
+    private int setlistTopOffset;
+    private int setlistBottomOffset;
+    private int triviaFontSize;
+    private int triviaDateSize;
+    private int triviaTopOffset;
+    private int triviaBottomOffset;
+    private int triviaLimit;
 
     private String setlistFilename;
     private String lastSongFilename;
@@ -129,11 +134,12 @@ public class Setlist {
 
     public Setlist(String url, boolean isDev,
     		Configuration setlistConfig, Configuration gameConfig,
-    		String setlistJpgFilename, String fontFilename, int fontSize,
-    		int topOffset, int bottomOffset, String setlistFilename,
-            String lastSongFilename, String setlistDir, String banFile,
-    		ArrayList<ArrayList<String>> nameList,
-    		ArrayList<String> symbolList, String currAccount,
+    		String setlistJpgFilename, String fontFilename, int setlistFontSize,
+    		int setlistTopOffset, int setlistBottomOffset, int triviaFontSize,
+            int triviaDateSize, int triviaTopOffset, int triviaBottomOffset,
+            int triviaLimit, String setlistFilename, String lastSongFilename,
+            String setlistDir, String banFile, ArrayList<ArrayList<String>>
+            nameList, ArrayList<String> symbolList, String currAccount,
             Parse parse, String setlistImageName, String scoresImageName) {
     	this.url = url;
     	this.isDev = isDev;
@@ -141,9 +147,14 @@ public class Setlist {
     	this.gameConfig = gameConfig;
     	this.setlistJpgFilename = setlistJpgFilename;
     	this.fontFilename = fontFilename;
-    	this.fontSize = fontSize;
-    	this.topOffset = topOffset;
-        this.bottomOffset = bottomOffset;
+    	this.setlistFontSize = setlistFontSize;
+    	this.setlistTopOffset = setlistTopOffset;
+        this.setlistBottomOffset = setlistBottomOffset;
+        this.triviaFontSize = triviaFontSize;
+        this.triviaDateSize = triviaDateSize;
+        this.triviaTopOffset = triviaTopOffset;
+        this.triviaBottomOffset = triviaBottomOffset;
+        this.triviaLimit = triviaLimit;
     	this.setlistFilename = setlistFilename;
     	this.lastSongFilename = lastSongFilename;
     	this.setlistDir = setlistDir;
@@ -303,7 +314,7 @@ public class Setlist {
     	logger.debug("duration: " + duration);
     	if (duration > 0) {
     		screenshot = new SetlistScreenshot(setlistJpgFilename, fontFilename,
-    				setlistText, fontSize, topOffset, bottomOffset,
+    				setlistText, setlistFontSize, setlistTopOffset, setlistBottomOffset,
                     setlistImageName);
             screenshot.createScreenshot();
             twitterUtil.updateStatus(setlistConfig, finalTweetText,
@@ -1054,7 +1065,7 @@ public class Setlist {
 	                }
 	                screenshot = new SetlistScreenshot(
 		    				setlistJpgFilename, fontFilename, setlistText,
-		    				fontSize, topOffset, bottomOffset,
+                            setlistFontSize, setlistTopOffset, setlistBottomOffset,
                             setlistImageName);
                     screenshot.createScreenshot();
 	                tweetSong(sb.toString(), gameMessage,
@@ -1403,7 +1414,7 @@ public class Setlist {
     }
 
     public void banUser(String user) {
-    	List<String> banList = fileUtil.readListFromFile(banFile);
+    	List<Object> banList = fileUtil.readListFromFile(banFile);
     	if (!banList.contains(user)) {
     		banList.add(user);
     	}
@@ -1414,9 +1425,16 @@ public class Setlist {
     }
     
     public void unbanUser(String user) {
-    	List<String> banList = fileUtil.readListFromFile(banFile);
+    	List<Object> banList = fileUtil.readListFromFile(banFile);
+        String banEntry;
 		for (int i = 0; i < banList.size(); i++) {
-			if (user.equalsIgnoreCase(banList.get(i))) {
+            if (banList.get(i) instanceof String) {
+                banEntry = (String) banList.get(i);
+            }
+            else {
+                continue;
+            }
+			if (user.equalsIgnoreCase(banEntry)) {
 				banList.remove(i);
 			}
 		}
@@ -1431,8 +1449,8 @@ public class Setlist {
             TreeMap<String, Integer> sortedUsersMap = sortUsersMap();
 			TriviaScreenshot gameScreenshot = new TriviaScreenshot(
                     setlistJpgFilename, fontFilename, "Top Scores",
-                    sortedUsersMap, 60, 30, 10, topOffset, bottomOffset,
-                    scoresImageName);
+                    sortedUsersMap, triviaFontSize, triviaDateSize, triviaLimit,
+                    triviaTopOffset, triviaBottomOffset, scoresImageName);
             gameScreenshot.createScreenshot();
             twitterUtil.updateStatus(gameConfig, isFinal ? FINAL_SCORES_TEXT :
                             CURRENT_SCORES_TEXT,
@@ -1454,7 +1472,7 @@ public class Setlist {
         TreeMap<String, Integer> sortedUsersMap =
                 new TreeMap<>(gameComparator);
         sortedUsersMap.putAll(usersMap);
-        List<String> banList = fileUtil.readListFromFile(banFile);
+        List<Object> banList = fileUtil.readListFromFile(banFile);
         for (String user : usersMap.keySet()) {
             if (banList.contains(user.toLowerCase(Locale.getDefault()))) {
                 sortedUsersMap.remove(user);
@@ -1511,7 +1529,7 @@ public class Setlist {
         boolean responseMatches;
         boolean isCorrect;
 
-        List<String> banList = fileUtil.readListFromFile(banFile);
+        List<Object> banList = fileUtil.readListFromFile(banFile);
 
         for (Entry<String, String> answer : answers.entrySet()) {
             if (banList.contains(answer.getKey().toLowerCase(

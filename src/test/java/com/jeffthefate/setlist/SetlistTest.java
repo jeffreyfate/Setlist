@@ -24,8 +24,8 @@ public class SetlistTest extends TestCase {
                 parse, false);
         setlist = new Setlist("", true, configuration, configuration,
                 new File("src/test/resources/setlist.jpg").getAbsolutePath(),
-                new File("src/test/resources/roboto.ttf").getAbsolutePath(), 21,
-                70, 40, "", "", "", "D:\\banlist.ser",
+                new File("src/test/resources/roboto.ttf").getAbsolutePath(), 35,
+                140, 20, 40, 20, 10, 200, 100, "", "", "", "D:\\banlist.ser",
                 gameUtil.generateSongMatchList(), gameUtil.generateSymbolList(),
                 "", parse, "target/" + getName() + "Setlist",
                 "target/" + getName() + "Scores");
