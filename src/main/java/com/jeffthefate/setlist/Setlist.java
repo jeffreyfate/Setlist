@@ -42,7 +42,6 @@ import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.nio.charset.Charset;
-import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.Map.Entry;
@@ -81,10 +80,13 @@ public class Setlist {
     private int triviaBottomOffset;
     private int triviaLimit;
 
+    private String gameTitle;
+
     private String setlistFilename;
     private String lastSongFilename;
     private String setlistDir;
     private String banFile;
+    private String scoresFile;
 
     private Configuration setlistConfig;
     private Configuration gameConfig;
@@ -104,7 +106,7 @@ public class Setlist {
     private ArrayList<String> noteList = new ArrayList<String>();
     private TreeMap<Integer, String> noteMap = new TreeMap<Integer, String>();
     
-    private HashMap<String, Integer> usersMap = new HashMap<String, Integer>();
+    private HashMap<Object, Object> usersMap = new HashMap<>();
     
     private String noteSong = "";
     
@@ -135,12 +137,14 @@ public class Setlist {
     public Setlist(String url, boolean isDev,
     		Configuration setlistConfig, Configuration gameConfig,
     		String setlistJpgFilename, String fontFilename, int setlistFontSize,
-    		int setlistTopOffset, int setlistBottomOffset, int triviaFontSize,
+    		int setlistTopOffset, int setlistBottomOffset,
+            String gameTitle, int triviaFontSize,
             int triviaDateSize, int triviaTopOffset, int triviaBottomOffset,
             int triviaLimit, String setlistFilename, String lastSongFilename,
-            String setlistDir, String banFile, ArrayList<ArrayList<String>>
-            nameList, ArrayList<String> symbolList, String currAccount,
-            Parse parse, String setlistImageName, String scoresImageName) {
+            String setlistDir, String banFile, String scoresFile,
+            ArrayList<ArrayList<String>> nameList,
+            ArrayList<String> symbolList, String currAccount, Parse parse,
+            String setlistImageName, String scoresImageName) {
     	this.url = url;
     	this.isDev = isDev;
     	this.setlistConfig = setlistConfig;
@@ -150,6 +154,7 @@ public class Setlist {
     	this.setlistFontSize = setlistFontSize;
     	this.setlistTopOffset = setlistTopOffset;
         this.setlistBottomOffset = setlistBottomOffset;
+        this.gameTitle = gameTitle;
         this.triviaFontSize = triviaFontSize;
         this.triviaDateSize = triviaDateSize;
         this.triviaTopOffset = triviaTopOffset;
@@ -159,6 +164,7 @@ public class Setlist {
     	this.lastSongFilename = lastSongFilename;
     	this.setlistDir = setlistDir;
     	this.banFile = banFile;
+        this.scoresFile = scoresFile;
     	this.nameList = nameList;
     	this.symbolList = symbolList;
     	this.currAccount = currAccount;
@@ -282,7 +288,15 @@ public class Setlist {
         return noteMap;
     }
 
-    public HashMap<String, Integer> getUsersMap() { return usersMap; }
+    public HashMap<Object, Object> getUsersMap() { return usersMap; }
+
+    public String getScoresFile() {
+        return scoresFile;
+    }
+
+    public void setScoresFile(String scoresFile) {
+        this.scoresFile = scoresFile;
+    }
 
     /**************************************************************************/
     /*                                Startup                                 */
@@ -290,6 +304,7 @@ public class Setlist {
     public void startSetlist(ArrayList<String> files) {
     	logger.info("Starting setlist...");
     	long endTime = System.currentTimeMillis() + duration;
+        usersMap = readScores();
     	inSetlist = true;
         int waitNum = 0;
     	do {
@@ -914,15 +929,15 @@ public class Setlist {
         else {
         	html = liveSetlist("https://whsec1.davematthewsband.com/backstage.asp");
         }
-        currDateString = convertDateFormat(SETLIST_DATE_FORMAT,
+        currDateString = gameUtil.convertDateFormat(SETLIST_DATE_FORMAT,
                 PARSE_DATE_FORMAT, locList.get(0));
         StringBuilder sb = new StringBuilder();
         if (locList.size() < 4) {
         	locList.add(1, "Dave Matthews Band");
         }
 		sb.append("[Final] Dave Matthews Band Setlist for ");
-		sb.append(convertDateFormat(SETLIST_DATE_FORMAT, TWEET_DATE_FORMAT,
-                locList.get(0)));
+		sb.append(gameUtil.convertDateFormat(SETLIST_DATE_FORMAT,
+                TWEET_DATE_FORMAT, locList.get(0)));
 		sb.append(" - ");
 		sb.append(locList.get(locList.size()-2));
 		finalTweetText = sb.toString();
@@ -1130,31 +1145,6 @@ public class Setlist {
     /**************************************************************************/
     /*                              Date Helpers                              */
     /**************************************************************************/
-    public Date convertStringToDate(String format, String dateString) {
-        if (format == null || dateString == null) {
-            return null;
-        }
-        dateString = dateString.replace('_', ':');
-    	SimpleDateFormat dateFormat = new SimpleDateFormat(format);
-        dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
-    	Date date = null;
-    	try {
-            date = dateFormat.parse(dateString);
-        } catch (ParseException e2) {
-            logger.info("Failed to parse date from " + dateString);
-            e2.printStackTrace();
-        }
-    	return date;
-    }
-
-    private String convertDateFormat(String fromFormat, String toFormat,
-            String dateString) {
-        Date date = convertStringToDate(fromFormat, dateString);
-        SimpleDateFormat dateFormat = new SimpleDateFormat(toFormat);
-        dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
-        return dateFormat.format(date.getTime());
-    }
-
     private String getExpireDateString() {
         SimpleDateFormat dateFormat = new SimpleDateFormat(PARSE_DATE_FORMAT);
         dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
@@ -1209,7 +1199,7 @@ public class Setlist {
     
     private String createSetlistJsonString(String latestSetlist,
             String venueId) {
-        currDateString = convertDateFormat(SETLIST_DATE_FORMAT,
+        currDateString = gameUtil.convertDateFormat(SETLIST_DATE_FORMAT,
                 PARSE_DATE_FORMAT, locList.get(0));
         JsonNodeFactory factory = JsonNodeFactory.instance;
         ObjectNode rootNode = factory.objectNode();
@@ -1240,8 +1230,8 @@ public class Setlist {
         dataNode.put("action", "com.jeffthefate.dmb.ACTION_NEW_SONG");
         dataNode.put("song", latestSong);
         dataNode.put("setlist", setlist);
-        dataNode.put("shortDate", convertDateFormat(SETLIST_DATE_FORMAT,
-                SHORT_DATE_FORMAT, locList.get(0)));
+        dataNode.put("shortDate", gameUtil.convertDateFormat(
+                SETLIST_DATE_FORMAT, SHORT_DATE_FORMAT, locList.get(0)));
         dataNode.put("venueName", getVenueName());
         dataNode.put("venueCity", getVenueCity());
         dataNode.put("timestamp", Long.toString(System.currentTimeMillis()));
@@ -1282,7 +1272,7 @@ public class Setlist {
     }
     
     private int uploadLatest(String latestSetlist) {
-        String dateString = convertDateFormat(SETLIST_DATE_FORMAT,
+        String dateString = gameUtil.convertDateFormat(SETLIST_DATE_FORMAT,
                 PARSE_DATE_FORMAT, locList.get(0));
         String getSetlistResponse = getSetlist(dateString);
         if (getSetlistResponse == null) {
@@ -1311,11 +1301,14 @@ public class Setlist {
         		postSetlist(createSetlistJsonString(latestSetlist, venueId));
         	}
             List<String> files = fileUtil.getListOfFiles(setlistDir, ".txt");
-            Date newDate = convertStringToDate(PARSE_DATE_FORMAT, dateString);
+            Date newDate = gameUtil.convertStringToDate(PARSE_DATE_FORMAT,
+                    dateString);
+            Date fileDate;
             for (String file : files) {
             	if (file.startsWith("setlist")) {
-            		if (convertStringToDate(PARSE_DATE_FORMAT,
-            				file.substring(7)).after(newDate)) {
+                    fileDate = gameUtil.convertStringToDate(PARSE_DATE_FORMAT,
+                            file.substring(7));
+            		if (fileDate != null && fileDate.after(newDate)) {
             			logger.info("newer setlist file found!");
             			return 1;
             		}
@@ -1401,7 +1394,7 @@ public class Setlist {
     /**************************************************************************/
     public String createWinnersMessage(String lastSong, String songMessage) {
         final String CORRECT_ANSWERS_TEXT = "\nCorrect guesses:";
-        List<String> winners = findWinners(lastSong);
+        List<Object> winners = findWinners(lastSong);
         answers.clear();
         answers = new LinkedHashMap<>();
         return createPlayersMessage(winners, usersMap, songMessage,
@@ -1446,9 +1439,9 @@ public class Setlist {
 
 	public void postSetlistScoresImage(boolean isFinal) {
 		if (!usersMap.isEmpty()) {
-            TreeMap<String, Integer> sortedUsersMap = sortUsersMap();
+            TreeMap<Object, Object> sortedUsersMap = sortUsersMap();
 			TriviaScreenshot gameScreenshot = new TriviaScreenshot(
-                    setlistJpgFilename, fontFilename, "Top Scores",
+                    setlistJpgFilename, fontFilename, gameTitle,
                     sortedUsersMap, triviaFontSize, triviaDateSize, triviaLimit,
                     triviaTopOffset, triviaBottomOffset, scoresImageName);
             gameScreenshot.createScreenshot();
@@ -1460,44 +1453,46 @@ public class Setlist {
 	
 	public void postSetlistScoresText(boolean isFinal) {
 		if (!usersMap.isEmpty()) {
-            List<String> winners = new ArrayList<>(usersMap.keySet());
+            List<Object> winners = new ArrayList<>(usersMap.keySet());
             String message = createPlayersMessage(winners, usersMap,
                     isFinal ? FINAL_SCORES_TEXT : CURRENT_SCORES_TEXT, "");
             twitterUtil.updateStatus(gameConfig, message, null, -1);
 		}
 	}
 
-    public TreeMap<String, Integer> sortUsersMap() {
+    public TreeMap<Object, Object> sortUsersMap() {
         GameComparator gameComparator = new GameComparator(usersMap);
-        TreeMap<String, Integer> sortedUsersMap =
+        TreeMap<Object, Object> sortedUsersMap =
                 new TreeMap<>(gameComparator);
         sortedUsersMap.putAll(usersMap);
         List<Object> banList = fileUtil.readListFromFile(banFile);
-        for (String user : usersMap.keySet()) {
-            if (banList.contains(user.toLowerCase(Locale.getDefault()))) {
+        for (Object user : usersMap.keySet()) {
+            if (banList.contains(((String) user).toLowerCase(
+                    Locale.getDefault()))) {
                 sortedUsersMap.remove(user);
             }
         }
         return sortedUsersMap;
     }
 
-    public String createPlayersMessage(List<String> winners,
-            HashMap<String, Integer> usersMap, String songMessage,
+    public String createPlayersMessage(List<Object> winners,
+            HashMap<Object, Object> usersMap, String songMessage,
             String correctText) {
         String message = "";
         if (!winners.isEmpty() && (songMessage.length() +
-                correctText.length()-1 + winners.get(0).length() + 10 +
-                usersMap.get(winners.get(0)).toString().length())
+                correctText.length()-1 + ((String) winners.get(0)).length() +
+                10 + usersMap.get(winners.get(0)).toString().length())
                 <= 140) {
             StringBuilder sb = new StringBuilder();
             sb.append(correctText);
             int count = 0;
-            for (String winner : winners) {
+            for (Object winner : winners) {
                 count++;
                 logger.info("Setlist game tweet length: " + sb.length());
                 if ((songMessage.length() + sb.length()-1 + 3 +
-                        Integer.toString(count).length() + 4 + winner.length() +
-                        2 + usersMap.get(winner).toString().length() + 1) >
+                        Integer.toString(count).length() + 4 +
+                        ((String) winner).length() + 2 +
+                        usersMap.get(winner).toString().length() + 1) >
                         140) {
                     break;
                 }
@@ -1520,8 +1515,8 @@ public class Setlist {
         return message;
     }
 
-    public List<String> findWinners(String lastSong) {
-        List<String> winners = new ArrayList<>(0);
+    public List<Object> findWinners(String lastSong) {
+        List<Object> winners = new ArrayList<>(0);
 
         lastSong = gameUtil.massageAnswer(lastSong);
 
@@ -1568,14 +1563,28 @@ public class Setlist {
                 winners.add(answer.getKey());
                 if (usersMap.containsKey(answer.getKey())) {
                     usersMap.put(answer.getKey(),
-                            usersMap.get(answer.getKey())+1);
+                            ((Integer)usersMap.get(answer.getKey()))+1);
                 }
                 else {
                     usersMap.put(answer.getKey(), 1);
                 }
             }
         }
+        saveScores();
         return winners;
+    }
+
+    public boolean saveScores() {
+        if (!fileUtil.saveHashMapToFile(scoresFile, usersMap)) {
+            twitterUtil.sendDirectMessage(gameConfig, "Copperpot5",
+                    "Failed saving scores!");
+            return false;
+        }
+        return true;
+    }
+
+    public HashMap<Object, Object> readScores() {
+        return fileUtil.readHashMapFromFile(scoresFile);
     }
 
 }
