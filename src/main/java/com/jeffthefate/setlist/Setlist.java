@@ -304,7 +304,7 @@ public class Setlist {
     public void startSetlist(ArrayList<String> files) {
     	logger.info("Starting setlist...");
     	long endTime = System.currentTimeMillis() + duration;
-        usersMap = readScores();
+        usersMap = gameUtil.readScores(scoresFile);
     	inSetlist = true;
         int waitNum = 0;
     	do {
@@ -1570,21 +1570,8 @@ public class Setlist {
                 }
             }
         }
-        saveScores();
+        gameUtil.saveScores(scoresFile, usersMap, gameConfig);
         return winners;
-    }
-
-    public boolean saveScores() {
-        if (!fileUtil.saveHashMapToFile(scoresFile, usersMap)) {
-            twitterUtil.sendDirectMessage(gameConfig, "Copperpot5",
-                    "Failed saving scores!");
-            return false;
-        }
-        return true;
-    }
-
-    public HashMap<Object, Object> readScores() {
-        return fileUtil.readHashMapFromFile(scoresFile);
     }
 
 }
