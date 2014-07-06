@@ -20,10 +20,9 @@ public class SortedUsersTest extends TestCase {
 	}
 	
 	public void testSortedUsers() {
-		HashMap<String, Integer> usersMap = new HashMap<String, Integer>(0);
-		TreeMap<String, Integer> sortedUsersMap =
-	    		new TreeMap<String, Integer>(
-	    				new GameComparator(usersMap));
+		HashMap<Object, Object> usersMap = new HashMap<>(0);
+		TreeMap<Object, Object> sortedUsersMap =
+	    		new TreeMap<>(new GameComparator(usersMap));
 		usersMap.put("jeffthefate", 5);
 		usersMap.put("copperpot5", 2);
 		usersMap.put("tjapple", 3);
@@ -31,8 +30,10 @@ public class SortedUsersTest extends TestCase {
 		usersMap.put("duh", 0);
 		sortedUsersMap.putAll(usersMap);
 		int last = 100000;
-		for (Entry<String, Integer> user : sortedUsersMap.entrySet()) {
-			assertTrue("Not sorted correctly!", user.getValue() < last);
+		for (Entry<Object, Object> user : sortedUsersMap.entrySet()) {
+			assertTrue("Not sorted correctly!", (Integer) user.getValue() <
+                    last);
+            last = (Integer) user.getValue();
 		}
 	}
 

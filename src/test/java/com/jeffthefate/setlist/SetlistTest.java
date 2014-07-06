@@ -1,21 +1,16 @@
 package com.jeffthefate.setlist;
 
+import com.jeffthefate.utils.CredentialUtil;
 import com.jeffthefate.utils.GameUtil;
+import com.jeffthefate.utils.Parse;
 import junit.framework.TestCase;
 import twitter4j.conf.Configuration;
-import twitter4j.conf.ConfigurationBuilder;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Date;
 
 public class SetlistTest extends TestCase {
-	
-	private static final String DEV_KEY = "BXx60ptC4JAMBQLQ965H3g";
-	private static final String DEV_SECRET = "0ivTqB1HKqQ6t7HQhIl0tTUNk8uRnv1nhDqyFXBw";
-	private static final String DEV_ACCESS_TOKEN = "1265342035-6mYSoxlw8NuZSdWX0AS6cpIu3We2CbCev6rbKUQ";
-	private static final String DEV_ACCESS_SECRET = "XqxxE4qLUK3wJ4LHlIbcSP1m6G4spZVmCDdu5RLuU";
-	private static final String DEV_ACCOUNT = "dmbtriviatest";
 
     private Setlist setlist;
     private GameUtil gameUtil;
@@ -23,26 +18,21 @@ public class SetlistTest extends TestCase {
     public void setUp() throws Exception {
         super.setUp();
         gameUtil = GameUtil.instance();
-        setlist = new Setlist("", true, setupDevConfig(), setupDevConfig(),
+        CredentialUtil credentialUtil = CredentialUtil.instance();
+        Parse parse = credentialUtil.getCredentialedParse(true,
+                "D:\\parseCreds");
+        Configuration configuration = credentialUtil.getCredentialedTwitter(
+                parse, false);
+        setlist = new Setlist("", true, configuration, configuration,
                 new File("src/test/resources/setlist.jpg").getAbsolutePath(),
-                new File("src/test/resources/roboto.ttf").getAbsolutePath(), 21,
-                70, 40, "", "", "", "D:\\banlist.ser",
+                new File("src/test/resources/roboto.ttf").getAbsolutePath(), 35,
+                140, 20, "Game Title", 40, 20, 10, 200, 100, "", "", "",
+                "D:\\banlist.ser", "D:\\scores.ser",
                 gameUtil.generateSongMatchList(), gameUtil.generateSymbolList(),
-                "", "6pJz1oVHAwZ7tfOuvHfQCRz6AVKZzg1itFVfzx2q",
-                "uNZMDvDSahtRxZVRwpUVwzAG9JdLzx4cbYnhYPi7",
-                "target/" + getName() + "Setlist",
+                "", parse, "target/" + getName() + "Setlist",
                 "target/" + getName() + "Scores");
     }
-	
-	private Configuration setupDevConfig() {
-		ConfigurationBuilder cb = new ConfigurationBuilder();
-		cb.setDebugEnabled(true)
-		  .setOAuthConsumerKey(DEV_KEY)
-		  .setOAuthConsumerSecret(DEV_SECRET)
-		  .setOAuthAccessToken(DEV_ACCESS_TOKEN)
-		  .setOAuthAccessTokenSecret(DEV_ACCESS_SECRET);
-		return cb.build();
-	}
+
 
     private void addAnswers() {
         setlist.addAnswer("jeffthefate", gameUtil.massageResponse("IBYU"));
@@ -92,15 +82,15 @@ public class SetlistTest extends TestCase {
 
     public void testConvertStringToDate() {
         Date date = new Date(1404086400000l);
-        Date newDate = setlist.convertStringToDate("MM/dd/yy", "6/30/14");
+        Date newDate = gameUtil.convertStringToDate("MM/dd/yy", "6/30/14");
         assertEquals("Dates don't match!", date, newDate);
-        assertNull("Date returned not null!", setlist.convertStringToDate
-                (null, null));
+        assertNull("Date returned not null!", gameUtil.convertStringToDate(null,
+                null));
     }
 
     public void testLiveSetlist() {
         setlist.liveSetlist("src/test/resources/test.txt");
-        ArrayList<String> setList = new ArrayList<String>();
+        ArrayList<String> setList = new ArrayList<>();
         setList.add("Beach Ball*");
         setList.add("Bartender+");
         setList.add("Slip Slidin Away~");
@@ -124,7 +114,7 @@ public class SetlistTest extends TestCase {
         setList.add("Dancing Nancies ->");
         setList.add("Warehouse");
         assertEquals("Set lists are not equal!", setList, setlist.getSetList());
-        ArrayList<String> noteList = new ArrayList<String>();
+        ArrayList<String> noteList = new ArrayList<>();
         noteList.add("Notes:");
         noteList.add("Ä Carter, Dave, Stefan and Tim");
         noteList.add("+ Dave And Tim");
@@ -138,7 +128,7 @@ public class SetlistTest extends TestCase {
     public void testSortUsersMap() {
         addLotsAnswers();
         setlist.findWinners("Ill Back You UpÄ");
-        ArrayList<String> sorted = new ArrayList<String>(0);
+        ArrayList<String> sorted = new ArrayList<>(0);
         sorted.add("jeffthefate");
         sorted.add("testuser1");
         sorted.add("testuser2");
@@ -146,7 +136,7 @@ public class SetlistTest extends TestCase {
         sorted.add("testuser5");
         sorted.add("testuser6");
         assertEquals("Sorted maps not equal!", sorted,
-                new ArrayList<String>(setlist.sortUsersMap().keySet()));
+                new ArrayList<>(setlist.sortUsersMap().keySet()));
     }
 
     public void testCreateWinnersMessage() {
@@ -160,9 +150,9 @@ public class SetlistTest extends TestCase {
 
     public void testSortUsersMapEmpty() {
         setlist.findWinners("Ill Back You UpÄ");
-        ArrayList<String> sorted = new ArrayList<String>(0);
+        ArrayList<String> sorted = new ArrayList<>(0);
         assertEquals("Sorted maps not equal!", sorted,
-                new ArrayList<String>(setlist.sortUsersMap().keySet()));
+                new ArrayList<>(setlist.sortUsersMap().keySet()));
     }
 
     public void testCreatePlayersMessage() {
@@ -189,7 +179,7 @@ public class SetlistTest extends TestCase {
 
     public void testFindWinnersCorrect() {
         addAnswers();
-        ArrayList<String> winners = new ArrayList<String>(0);
+        ArrayList<String> winners = new ArrayList<>(0);
         winners.add("jeffthefate");
         winners.add("testuser1");
         winners.add("testuser2");
@@ -199,7 +189,7 @@ public class SetlistTest extends TestCase {
 
     public void testFindWinnersIncorrect() {
         addIncorrectAnswers();
-        ArrayList<String> winners = new ArrayList<String>(0);
+        ArrayList<String> winners = new ArrayList<>(0);
         assertEquals("Winner lists don't match!", winners,
                 setlist.findWinners("Ill Back You UpÄ"));
     }
