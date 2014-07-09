@@ -4,9 +4,9 @@ import com.jeffthefate.SetlistScreenshot;
 import com.jeffthefate.TriviaScreenshot;
 import com.jeffthefate.utils.*;
 import com.jeffthefate.utils.json.JsonUtil;
-import com.jeffthefate.utils.json.SetlistResults;
-import com.jeffthefate.utils.json.Venue;
-import com.jeffthefate.utils.json.VenueResults;
+import com.jeffthefate.utils.json.parse.SetlistResults;
+import com.jeffthefate.utils.json.parse.Venue;
+import com.jeffthefate.utils.json.parse.VenueResults;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Logger;
 import org.codehaus.jackson.node.JsonNodeFactory;
@@ -1202,7 +1202,7 @@ public class Setlist {
             return -1;
         }
         else {
-            com.jeffthefate.utils.json.Setlist setlist = setlistResults
+            com.jeffthefate.utils.json.parse.Setlist setlist = setlistResults
                     .getResults().get(0);
         	String venueId = setlist.getVenue().getObjectId();
         	logger.info("VenueId: " + venueId);
