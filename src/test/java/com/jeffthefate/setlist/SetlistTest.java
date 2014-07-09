@@ -28,7 +28,8 @@ public class SetlistTest extends TestCase {
                 new File("src/test/resources/roboto.ttf").getAbsolutePath(), 35,
                 140, 20, "Game Title", 40, 20, 10, 200, 100, "", "", "",
                 "D:\\banlist.ser", "D:\\scores.ser",
-                gameUtil.generateSongMatchList(), gameUtil.generateSymbolList(),
+                gameUtil.generateSongMatchList(true, "D:\\parseCreds"),
+                gameUtil.generateSymbolList(true, "D:\\parseCreds"),
                 "", parse, "target/" + getName() + "Setlist",
                 "target/" + getName() + "Scores");
     }
