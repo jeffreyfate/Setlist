@@ -19,17 +19,16 @@ public class SetlistTest extends TestCase {
         super.setUp();
         gameUtil = GameUtil.instance();
         CredentialUtil credentialUtil = CredentialUtil.instance();
-        Parse parse = credentialUtil.getCredentialedParse(true,
-                "D:\\parseCreds");
+        Parse parse = credentialUtil.getCredentialedParse(true, "parseCreds");
         Configuration configuration = credentialUtil.getCredentialedTwitter(
                 parse, false);
         setlist = new Setlist("", true, configuration, configuration,
                 new File("src/test/resources/setlist.jpg").getAbsolutePath(),
                 new File("src/test/resources/roboto.ttf").getAbsolutePath(), 35,
                 140, 20, "Game Title", 40, 20, 10, 200, 100, "", "", "",
-                "D:\\banlist.ser", "D:\\scores.ser",
-                gameUtil.generateSongMatchList(true, "D:\\parseCreds"),
-                gameUtil.generateSymbolList(true, "D:\\parseCreds"),
+                "banlist.ser", "scores.ser",
+                gameUtil.generateSongMatchList(true, "parseCreds"),
+                gameUtil.generateSymbolList(true, "parseCreds"),
                 "", parse, "target/" + getName() + "Setlist",
                 "target/" + getName() + "Scores");
     }
