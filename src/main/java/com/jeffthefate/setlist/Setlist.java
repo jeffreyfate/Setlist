@@ -4,6 +4,7 @@ import com.jeffthefate.SetlistScreenshot;
 import com.jeffthefate.TriviaScreenshot;
 import com.jeffthefate.utils.*;
 import com.jeffthefate.utils.json.JsonUtil;
+import com.jeffthefate.utils.json.parse.Credential;
 import com.jeffthefate.utils.json.parse.SetlistResults;
 import com.jeffthefate.utils.json.parse.Venue;
 import com.jeffthefate.utils.json.parse.VenueResults;
@@ -113,6 +114,9 @@ public class Setlist {
 
     private Parse parse;
 
+    private String warehouseUser;
+    private String warehousePass;
+
     public Setlist(String url, boolean isDev,
     		Configuration setlistConfig, Configuration gameConfig,
     		String setlistJpgFilename, String fontFilename, int setlistFontSize,
@@ -150,6 +154,7 @@ public class Setlist {
         this.setlistImageName = setlistImageName;
         this.scoresImageName = scoresImageName;
         this.parse = parse;
+        getWarehouseCredentials();
     }
 
     public String getSetlistJpgFilename() {
@@ -292,6 +297,7 @@ public class Setlist {
             }
             if (files != null && waitNum == 3) {
                 if (files.isEmpty()) {
+                    logger.warn("files.isEmpty()");
                     break;
                 }
                 setUrl("src/test/resources/set/" + files.remove(0));
@@ -304,6 +310,9 @@ public class Setlist {
                 logger.error("Setlist check wait interrupted!");
                 e.printStackTrace();
             }
+            logger.info("endTime: " + endTime);
+            logger.info("currentTimeMillis: " + System.currentTimeMillis());
+            logger.info("kill: " + kill);
     	} while (endTime >= System.currentTimeMillis() && !kill);
     	logger.debug("duration: " + duration);
     	if (duration > 0) {
@@ -334,6 +343,21 @@ public class Setlist {
         return song;
     }
 
+    public void getWarehouseCredentials() {
+        List<Credential> credentialList = jsonUtil.getCredentialResults(
+                parse.get("Credential", "")).getResults();
+        for (Credential credential : credentialList) {
+            switch(credential.getName()) {
+                case "warehouseUser":
+                    warehouseUser = credential.getValue();
+                    break;
+                case "warehousePass":
+                    warehousePass = credential.getValue();
+                    break;
+            }
+        }
+    }
+
     // TODO Break this up?
     public String liveSetlist(String url) {
         final String SETLIST_STYLE = "font-family:sans-serif;font-size:14;"
@@ -341,7 +365,8 @@ public class Setlist {
         final String LOC_STYLE = "padding-bottom:12px;padding-left:3px;" +
                 "color:#3995aa;";
         final String SONG_STYLE = "Color:#000000;Position:Absolute;Top:";
-        Document doc = warehouseHtmlUtil.getPageDocument(url, true);
+        Document doc = warehouseHtmlUtil.getPageDocument(url, true,
+                warehouseUser, warehousePass);
         char badChar = 65533;
         char apos = 39;
         char endChar = 160;
@@ -888,12 +913,19 @@ public class Setlist {
         }
         if (!noteMap.isEmpty()) {
         	sb.append("\n");
+            ArrayList<String> notes = new ArrayList<>(noteMap.values());
+            String topNote = notes.remove(0);
+            Collections.sort(notes);
+            notes.add(0, topNote);
         	for (Entry<Integer, String> note : noteMap.entrySet()) {
         		sb.append("\n");
             	sb.append(note.getValue());
         	}
         }
         else if (!noteList.isEmpty()) {
+            String topNote = noteList.remove(0);
+            Collections.sort(noteList);
+            noteList.add(0, topNote);
     		sb.append("\n");
         	for (String note : noteList) {
         		sb.append("\n");
