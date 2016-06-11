@@ -104,6 +104,8 @@ public class Setlist {
     private FileUtil fileUtil = FileUtil.instance();
     private GameUtil gameUtil = GameUtil.instance();
     private TwitterUtil twitterUtil = TwitterUtil.instance();
+    private Facebook facebook;
+    private FacebookUtil facebookUtil = FacebookUtil.instance();
     private JsonUtil jsonUtil = JsonUtil.instance();
     private WarehouseHtmlUtil warehouseHtmlUtil = WarehouseHtmlUtil.instance();
     
@@ -117,8 +119,10 @@ public class Setlist {
     private String warehouseUser;
     private String warehousePass;
 
+    private boolean newSetlist = false;
+
     public Setlist(String url, boolean isDev,
-    		Configuration setlistConfig, Configuration gameConfig,
+    		Configuration setlistConfig, Configuration gameConfig, Facebook facebook,
     		String setlistJpgFilename, String fontFilename, int setlistFontSize,
     		int setlistTopOffset, int setlistBottomOffset,
             String gameTitle, int triviaFontSize,
@@ -132,6 +136,7 @@ public class Setlist {
     	this.isDev = isDev;
     	this.setlistConfig = setlistConfig;
     	this.gameConfig = gameConfig;
+        this.facebook = facebook;
     	this.setlistJpgFilename = setlistJpgFilename;
     	this.fontFilename = fontFilename;
     	this.setlistFontSize = setlistFontSize;
@@ -264,6 +269,10 @@ public class Setlist {
         return setList;
     }
 
+    public void clearSetList() {
+        setList.clear();
+    }
+
     public List<String> getNoteList() {
         return noteList;
     }
@@ -280,6 +289,12 @@ public class Setlist {
 
     public void setScoresFile(String scoresFile) {
         this.scoresFile = scoresFile;
+        HashMap<Object, Object> lastScores = gameUtil.readScores(
+                scoresFile);
+        if (lastScores == null) {
+            lastScores = new HashMap<>();
+        }
+        gameUtil.saveScores(scoresFile, lastScores, gameConfig);
     }
 
     /**************************************************************************/
@@ -314,17 +329,20 @@ public class Setlist {
             logger.info("currentTimeMillis: " + System.currentTimeMillis());
             logger.info("kill: " + kill);
     	} while (endTime >= System.currentTimeMillis() && !kill);
+        kill = false;
     	logger.debug("duration: " + duration);
-    	if (duration > 0) {
+    	if (duration > 0 && newSetlist) {
     		screenshot = new SetlistScreenshot(setlistJpgFilename, fontFilename,
     				setlistText, setlistFontSize, setlistTopOffset, setlistBottomOffset,
                     setlistImageName);
             screenshot.createScreenshot();
             twitterUtil.updateStatus(setlistConfig, finalTweetText,
                     new File(screenshot.getOutputFilename()), -1);
+            facebookUtil.postPhotoToPage(facebook, screenshot.getOutputFilename(), finalTweetText);
     		postSetlistScoresImage(true);
     	}
     	inSetlist = false;
+        newSetlist = false;
     }
     /**************************************************************************/
     /*                           Setlist Crunching                            */
@@ -383,7 +401,7 @@ public class Setlist {
         int divStyleLocation = -1;
         String oldNote;
         String divText;
-        TreeMap<Integer, String> songMap = new TreeMap<Integer, String>();
+        TreeMap<Integer, String> songMap = new TreeMap<>();
         int currentLoc;
         String currSong;
         int breaks = 0;
@@ -652,9 +670,15 @@ public class Setlist {
                                 songs[1], badChar, apos);
                         currSong = StringUtils.strip(StringUtils.replaceChars(
                                 currSong, badTranslation, "'"));
-                        setList.add(currSong);
-                        logger.info(currSong);
-                        lastSong = currSong;
+                        if (currSong.equalsIgnoreCase("holloween")) {
+                            currSong = "Halloween";
+                        }
+                        if (!(currSong.compareToIgnoreCase("Shake Me Like A Monkey") == 0 &&
+                                lastSong.compareToIgnoreCase("Shake Me Like A Monkey") == 0)) {
+                            setList.add(currSong);
+                            logger.info(currSong);
+                            lastSong = currSong;
+                        }
                         // Reset break tracking
                         breaks = 0;
                     }
@@ -793,9 +817,15 @@ public class Setlist {
             }
             for (Entry<Integer, String> song : songMap.entrySet()) {
                 currSong = StringUtils.strip(song.getValue());
-                setList.add(currSong);
-                logger.info(currSong);
-                lastSong = currSong;
+                if (currSong.equalsIgnoreCase("holloween")) {
+                    currSong = "Halloween";
+                }
+                if (!(currSong.compareToIgnoreCase("Shake Me Like A Monkey") == 0 &&
+                        lastSong.compareToIgnoreCase("Shake Me Like A Monkey") == 0)) {
+                    setList.add(currSong);
+                    logger.info(currSong);
+                    lastSong = currSong;
+                }
             }
             int segueIndex = -1;
             int partialIndex = -1;
@@ -816,8 +846,11 @@ public class Setlist {
                 String partial = noteList.remove(partialIndex);
                 noteList.add(partial);
             }
+            return doc.body().toString();
         }
-        return doc.body().toString();
+        else {
+            return "NO SETLIST RETURNED!!";
+        }
     }
     
     public void runSetlistCheck(String url) {
@@ -945,8 +978,9 @@ public class Setlist {
         logger.info("diff:");
         logger.info(diff);
         boolean hasChange = !StringUtils.isBlank(diff);
+        newSetlist |= hasChange;
         sb.setLength(0);
-        if (hasChange) {
+        if (hasChange && !setList.get(0).equalsIgnoreCase("test")) {
             fileUtil.writeStringToFile(setlistText, setlistFile);
             // -1 if failure or not a new setlist
             // 0 if a new setlist (latest)
