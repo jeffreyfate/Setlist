@@ -1,15 +1,17 @@
 package com.jeffthefate.setlist;
 
+import com.jeffthefate.utils.Backendless;
 import com.jeffthefate.utils.CredentialUtil;
 import com.jeffthefate.utils.GameUtil;
-import com.jeffthefate.utils.Parse;
 import junit.framework.TestCase;
+import org.junit.Ignore;
 import twitter4j.conf.Configuration;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Date;
 
+@Ignore
 public class SetlistTest extends TestCase {
 
     private Setlist setlist;
@@ -19,17 +21,16 @@ public class SetlistTest extends TestCase {
         super.setUp();
         gameUtil = GameUtil.instance();
         CredentialUtil credentialUtil = CredentialUtil.instance();
-        Parse parse = credentialUtil.getCredentialedParse(true,
-                "D:\\parseCreds");
-        Configuration configuration = credentialUtil.getCredentialedTwitter(
-                parse, false);
+        Backendless backendless = credentialUtil.getCredentialedBackendless(true,
+                "/Users/jfate/Google Drive/backendlessCreds.ser");
+        Configuration configuration = credentialUtil.getCredentialedTwitter(backendless, false);
         setlist = new Setlist("", true, configuration, configuration,
                 new File("src/test/resources/setlist.jpg").getAbsolutePath(),
                 new File("src/test/resources/roboto.ttf").getAbsolutePath(), 35,
                 140, 20, "Game Title", 40, 20, 10, 200, 100, "", "", "",
                 "D:\\banlist.ser", "D:\\scores.ser",
                 gameUtil.generateSongMatchList(), gameUtil.generateSymbolList(),
-                "", parse, "target/" + getName() + "Setlist",
+                "", backendless, "target/" + getName() + "Setlist",
                 "target/" + getName() + "Scores");
     }
 

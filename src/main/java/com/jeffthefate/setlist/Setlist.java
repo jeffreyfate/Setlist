@@ -132,19 +132,15 @@ public class Setlist {
     private String setlistImageName;
     private String scoresImageName;
 
-    private Parse parse;
+    private Backendless backendless;
 
-    public Setlist(String url, boolean isDev,
-    		Configuration setlistConfig, Configuration gameConfig,
-    		String setlistJpgFilename, String fontFilename, int setlistFontSize,
-    		int setlistTopOffset, int setlistBottomOffset,
-            String gameTitle, int triviaFontSize,
-            int triviaDateSize, int triviaTopOffset, int triviaBottomOffset,
-            int triviaLimit, String setlistFilename, String lastSongFilename,
-            String setlistDir, String banFile, String scoresFile,
-            ArrayList<ArrayList<String>> nameList,
-            ArrayList<String> symbolList, String currAccount, Parse parse,
-            String setlistImageName, String scoresImageName) {
+    public Setlist(String url, boolean isDev, Configuration setlistConfig, Configuration gameConfig,
+                   String setlistJpgFilename, String fontFilename, int setlistFontSize, int setlistTopOffset,
+                   int setlistBottomOffset, String gameTitle, int triviaFontSize, int triviaDateSize,
+                   int triviaTopOffset, int triviaBottomOffset, int triviaLimit, String setlistFilename,
+                   String lastSongFilename, String setlistDir, String banFile, String scoresFile,
+                   ArrayList<ArrayList<String>> nameList, ArrayList<String> symbolList, String currAccount,
+                   Backendless backendless, String setlistImageName, String scoresImageName) {
     	this.url = url;
     	this.isDev = isDev;
     	this.setlistConfig = setlistConfig;
@@ -170,7 +166,7 @@ public class Setlist {
     	this.currAccount = currAccount;
         this.setlistImageName = setlistImageName;
         this.scoresImageName = scoresImageName;
-        this.parse = parse;
+        this.backendless = backendless;
     }
 
     public String getSetlistJpgFilename() {
@@ -1044,7 +1040,7 @@ public class Setlist {
             if (newDate == -2) {
                 return;
             }
-            Venue venue = jsonUtil.getVenue(parse.getObject("Venue",
+            Venue venue = jsonUtil.getVenue(backendless.getObject("Venue",
                     getVenueId()));
             setVenueCity(venue.getCity());
             setVenueName(venue.getName());
@@ -1160,7 +1156,7 @@ public class Setlist {
         if (dateString == null) {
             return null;
         }
-        return parse.get("Setlist", "?where=" +
+        return backendless.get("Setlist", "?where=" +
                 createGetSetlistJson(dateString));
     }
 
@@ -1182,18 +1178,18 @@ public class Setlist {
     }
     
     private String postSetlist(String json) {
-        String response = parse.post("Setlist", json);
+        String response = backendless.post("Setlist", json);
         return jsonUtil.getCreated(response).getObjectId();
     }
     
     private boolean putSetlist(String objectId, String json) {
     	logger.info("putSetlist: " + objectId + " : " + json);
-        String response = parse.put("Setlist", objectId, json);
+        String response = backendless.put("Setlist", objectId, json);
         return response != null;
     }
     
     private boolean postNotification(String json) {
-        String response = parse.postPush(json);
+        String response = backendless.postPush(json);
         return response != null;
     }
     
@@ -1268,7 +1264,7 @@ public class Setlist {
                 return null;
             }
         }
-        return parse.get(className, sb.toString());
+        return backendless.get(className, sb.toString());
     }
     
     private int uploadLatest(String latestSetlist) {
@@ -1289,7 +1285,7 @@ public class Setlist {
             Venue venue;
             String venueId;
             if (venueResults.getResults().isEmpty()) {
-                venue = jsonUtil.getVenue(parse.post("Venue", venueJson));
+                venue = jsonUtil.getVenue(backendless.post("Venue", venueJson));
                 venue.setName(locList.get(2));
                 venue.setCity(locList.get(3));
             }
@@ -1333,7 +1329,7 @@ public class Setlist {
         		venueId = venue.getObjectId();
         		logger.info("VenueId: " + venueId);
         		if (venueId == null) {
-                    venue = jsonUtil.getVenue(parse.post("Venue", venueJson));
+                    venue = jsonUtil.getVenue(backendless.post("Venue", venueJson));
     				venueId = venue.getObjectId();
     				logger.info("VenueId: " + venueId);
             	}
