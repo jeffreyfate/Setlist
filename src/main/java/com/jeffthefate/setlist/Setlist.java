@@ -4,41 +4,20 @@ import com.jeffthefate.SetlistScreenshot;
 import com.jeffthefate.TriviaScreenshot;
 import com.jeffthefate.utils.*;
 import com.jeffthefate.utils.json.JsonUtil;
-import com.jeffthefate.utils.json.SetlistResults;
-import com.jeffthefate.utils.json.Venue;
-import com.jeffthefate.utils.json.VenueResults;
-import org.apache.commons.lang3.StringEscapeUtils;
+import com.jeffthefate.utils.json.parse.Credential;
+import com.jeffthefate.utils.json.parse.SetlistResults;
+import com.jeffthefate.utils.json.parse.Venue;
+import com.jeffthefate.utils.json.parse.VenueResults;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.http.HttpResponse;
-import org.apache.http.NameValuePair;
-import org.apache.http.client.ClientProtocolException;
-import org.apache.http.client.HttpClient;
-import org.apache.http.client.entity.UrlEncodedFormEntity;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.config.Registry;
-import org.apache.http.config.RegistryBuilder;
-import org.apache.http.conn.socket.ConnectionSocketFactory;
-import org.apache.http.conn.ssl.BrowserCompatHostnameVerifier;
-import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
-import org.apache.http.conn.ssl.SSLContexts;
-import org.apache.http.conn.ssl.X509HostnameVerifier;
-import org.apache.http.impl.client.HttpClientBuilder;
-import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
-import org.apache.http.message.BasicNameValuePair;
-import org.apache.http.util.EntityUtils;
 import org.apache.log4j.Logger;
 import org.codehaus.jackson.node.JsonNodeFactory;
 import org.codehaus.jackson.node.ObjectNode;
-import org.jsoup.Jsoup;
 import org.jsoup.nodes.*;
 import org.jsoup.select.Elements;
 import twitter4j.Status;
 import twitter4j.conf.Configuration;
 
-import javax.net.ssl.SSLContext;
 import java.io.File;
-import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.nio.charset.Charset;
@@ -125,7 +104,10 @@ public class Setlist {
     private FileUtil fileUtil = FileUtil.instance();
     private GameUtil gameUtil = GameUtil.instance();
     private TwitterUtil twitterUtil = TwitterUtil.instance();
+    private Facebook facebook;
+    private FacebookUtil facebookUtil = FacebookUtil.instance();
     private JsonUtil jsonUtil = JsonUtil.instance();
+    private WarehouseHtmlUtil warehouseHtmlUtil = WarehouseHtmlUtil.instance();
     
     private Logger logger = Logger.getLogger(Setlist.class);
 
@@ -134,8 +116,13 @@ public class Setlist {
 
     private Parse parse;
 
+    private String warehouseUser;
+    private String warehousePass;
+
+    private boolean newSetlist = false;
+
     public Setlist(String url, boolean isDev,
-    		Configuration setlistConfig, Configuration gameConfig,
+    		Configuration setlistConfig, Configuration gameConfig, Facebook facebook,
     		String setlistJpgFilename, String fontFilename, int setlistFontSize,
     		int setlistTopOffset, int setlistBottomOffset,
             String gameTitle, int triviaFontSize,
@@ -149,6 +136,7 @@ public class Setlist {
     	this.isDev = isDev;
     	this.setlistConfig = setlistConfig;
     	this.gameConfig = gameConfig;
+        this.facebook = facebook;
     	this.setlistJpgFilename = setlistJpgFilename;
     	this.fontFilename = fontFilename;
     	this.setlistFontSize = setlistFontSize;
@@ -171,6 +159,7 @@ public class Setlist {
         this.setlistImageName = setlistImageName;
         this.scoresImageName = scoresImageName;
         this.parse = parse;
+        getWarehouseCredentials();
     }
 
     public String getSetlistJpgFilename() {
@@ -280,6 +269,10 @@ public class Setlist {
         return setList;
     }
 
+    public void clearSetList() {
+        setList.clear();
+    }
+
     public List<String> getNoteList() {
         return noteList;
     }
@@ -296,6 +289,12 @@ public class Setlist {
 
     public void setScoresFile(String scoresFile) {
         this.scoresFile = scoresFile;
+        HashMap<Object, Object> lastScores = gameUtil.readScores(
+                scoresFile);
+        if (lastScores == null) {
+            lastScores = new HashMap<>();
+        }
+        gameUtil.saveScores(scoresFile, lastScores, gameConfig);
     }
 
     /**************************************************************************/
@@ -304,7 +303,7 @@ public class Setlist {
     public void startSetlist(ArrayList<String> files) {
     	logger.info("Starting setlist...");
     	long endTime = System.currentTimeMillis() + duration;
-        usersMap = readScores();
+        usersMap = gameUtil.readScores(scoresFile);
     	inSetlist = true;
         int waitNum = 0;
     	do {
@@ -313,6 +312,7 @@ public class Setlist {
             }
             if (files != null && waitNum == 3) {
                 if (files.isEmpty()) {
+                    logger.warn("files.isEmpty()");
                     break;
                 }
                 setUrl("src/test/resources/set/" + files.remove(0));
@@ -325,119 +325,25 @@ public class Setlist {
                 logger.error("Setlist check wait interrupted!");
                 e.printStackTrace();
             }
+            logger.info("endTime: " + endTime);
+            logger.info("currentTimeMillis: " + System.currentTimeMillis());
+            logger.info("kill: " + kill);
     	} while (endTime >= System.currentTimeMillis() && !kill);
+        kill = false;
     	logger.debug("duration: " + duration);
-    	if (duration > 0) {
+    	if (duration > 0 && newSetlist) {
     		screenshot = new SetlistScreenshot(setlistJpgFilename, fontFilename,
     				setlistText, setlistFontSize, setlistTopOffset, setlistBottomOffset,
                     setlistImageName);
             screenshot.createScreenshot();
             twitterUtil.updateStatus(setlistConfig, finalTweetText,
                     new File(screenshot.getOutputFilename()), -1);
+            facebookUtil.postPhotoToPage(facebook, screenshot.getOutputFilename(), finalTweetText);
     		postSetlistScoresImage(true);
     	}
     	inSetlist = false;
+        newSetlist = false;
     }
-
-    /**************************************************************************/
-    /*                              DOM Fetching                              */
-    /**************************************************************************/
-    private HttpClient createSecureConnection() {
-        // SSL context for secure connections can be created either based on
-        // system or application specific properties.
-        SSLContext sslcontext = SSLContexts.createSystemDefault();
-        // Use custom hostname verifier to customize SSL hostname verification.
-        X509HostnameVerifier hostnameVerifier = new BrowserCompatHostnameVerifier();
-        Registry<ConnectionSocketFactory> socketFactoryRegistry = RegistryBuilder.<ConnectionSocketFactory>create()
-                .register("https", new SSLConnectionSocketFactory(sslcontext, hostnameVerifier))
-                .build();
-
-        PoolingHttpClientConnectionManager mgr = new PoolingHttpClientConnectionManager(
-                socketFactoryRegistry);
-
-        return HttpClientBuilder.create().setConnectionManager(mgr).build();
-    }
-
-    public Document getPageDocument(String url) {
-        if (url.startsWith("http")) {
-            HttpPost postMethod = new HttpPost(
-                    "https://whsec1.davematthewsband.com/login.asp");
-            postMethod.addHeader("Accept",
-                    "text/html, application/xhtml+xml, */*");
-            postMethod.addHeader("Referer",
-                    "https://whsec1.davematthewsband.com/login.asp");
-            postMethod.addHeader("Accept-Language", "en-US");
-            postMethod.addHeader("User-Agent",
-                    "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; " +
-                            "WOW64; Trident/5.0)");
-            postMethod.addHeader("Content-Type",
-                    "application/x-www-form-urlencoded");
-            postMethod.addHeader("Accept-Encoding", "gzip, deflate");
-            postMethod.addHeader("Host", "whsec1.davematthewsband.com");
-            postMethod.addHeader("Connection", "Keep-Alive");
-            postMethod.addHeader("Cache-Control", "no-cache");
-            postMethod.addHeader("Cookie",
-                    "MemberInfo=isInternational=&MemberID=&UsrCount=" +
-                            "04723365306&ExpDate=&Username=; ASPSESSIONIDQQTDRTTC=" +
-                            "PKEGDEFCJBLAIKFCLAHODBHN; __utma=10963442.556285711." +
-                            "1366154882.1366154882.1366154882.1; __utmb=10963442.2." +
-                            "10.1366154882; __utmc=10963442; __utmz=10963442." +
-                            "1366154882.1.1.utmcsr=warehouse.dmband.com|utmccn=" +
-                            "(referral)|utmcmd=referral|utmcct=/; " +
-                            "ASPSESSIONIDSSDRTSRA=HJBPPKFCJGEJKGNEMJJMAIPN");
-
-            List<NameValuePair> nameValuePairs =
-                    new ArrayList<>();
-            nameValuePairs.add(new BasicNameValuePair("the_url", ""));
-            nameValuePairs.add(new BasicNameValuePair("form_action", "login"));
-            nameValuePairs.add(new BasicNameValuePair("Username", "fateman"));
-            nameValuePairs.add(new BasicNameValuePair("Password", "nintendo"));
-            nameValuePairs.add(new BasicNameValuePair("x", "0"));
-            nameValuePairs.add(new BasicNameValuePair("y", "0"));
-            try {
-                postMethod.setEntity(new UrlEncodedFormEntity(nameValuePairs));
-            } catch (UnsupportedEncodingException e) {
-                logger.error("Unsupported encoding for " + nameValuePairs);
-                e.printStackTrace();
-            }
-            HttpResponse response = null;
-            HttpClient client = createSecureConnection();
-            try {
-                response = client.execute(postMethod);
-            } catch (IOException e) {
-                logger.error("Unable to connect to " +
-                        postMethod.getURI().toASCIIString());
-                e.printStackTrace();
-            }
-            if (response == null || (response.getStatusLine().getStatusCode() !=
-                    200 && response.getStatusLine().getStatusCode() != 302))
-                logger.info("Failed to get response from to " +
-                        postMethod.getURI().toASCIIString());
-            HttpGet getMethod = new HttpGet(url);
-            String html = null;
-            if (!url.startsWith("https"))
-                client = HttpClientBuilder.create().build();
-            try {
-                response = client.execute(getMethod);
-                html = EntityUtils.toString(response.getEntity(), "UTF-8");
-                html = StringEscapeUtils.unescapeHtml4(html);
-            } catch (ClientProtocolException e1) {
-                logger.info("Failed to connect to " +
-                        getMethod.getURI().toASCIIString());
-                e1.printStackTrace();
-            } catch (IOException e1) {
-                logger.info("Failed to get setlist from " +
-                        getMethod.getURI().toASCIIString());
-                e1.printStackTrace();
-            }
-            return Jsoup.parse(html);
-        }
-        else {
-            return Jsoup.parse(StringEscapeUtils.unescapeHtml4(
-                    fileUtil.readStringFromFile(url)));
-        }
-    }
-
     /**************************************************************************/
     /*                           Setlist Crunching                            */
     /**************************************************************************/
@@ -455,6 +361,21 @@ public class Setlist {
         return song;
     }
 
+    public void getWarehouseCredentials() {
+        List<Credential> credentialList = jsonUtil.getCredentialResults(
+                parse.get("Credential", "")).getResults();
+        for (Credential credential : credentialList) {
+            switch(credential.getName()) {
+                case "warehouseUser":
+                    warehouseUser = credential.getValue();
+                    break;
+                case "warehousePass":
+                    warehousePass = credential.getValue();
+                    break;
+            }
+        }
+    }
+
     // TODO Break this up?
     public String liveSetlist(String url) {
         final String SETLIST_STYLE = "font-family:sans-serif;font-size:14;"
@@ -462,7 +383,8 @@ public class Setlist {
         final String LOC_STYLE = "padding-bottom:12px;padding-left:3px;" +
                 "color:#3995aa;";
         final String SONG_STYLE = "Color:#000000;Position:Absolute;Top:";
-        Document doc = getPageDocument(url);
+        Document doc = warehouseHtmlUtil.getPageDocument(url, true,
+                warehouseUser, warehousePass);
         char badChar = 65533;
         char apos = 39;
         char endChar = 160;
@@ -479,7 +401,7 @@ public class Setlist {
         int divStyleLocation = -1;
         String oldNote;
         String divText;
-        TreeMap<Integer, String> songMap = new TreeMap<Integer, String>();
+        TreeMap<Integer, String> songMap = new TreeMap<>();
         int currentLoc;
         String currSong;
         int breaks = 0;
@@ -748,9 +670,15 @@ public class Setlist {
                                 songs[1], badChar, apos);
                         currSong = StringUtils.strip(StringUtils.replaceChars(
                                 currSong, badTranslation, "'"));
-                        setList.add(currSong);
-                        logger.info(currSong);
-                        lastSong = currSong;
+                        if (currSong.equalsIgnoreCase("holloween")) {
+                            currSong = "Halloween";
+                        }
+                        if (!(currSong.compareToIgnoreCase("Shake Me Like A Monkey") == 0 &&
+                                lastSong.compareToIgnoreCase("Shake Me Like A Monkey") == 0)) {
+                            setList.add(currSong);
+                            logger.info(currSong);
+                            lastSong = currSong;
+                        }
                         // Reset break tracking
                         breaks = 0;
                     }
@@ -889,9 +817,15 @@ public class Setlist {
             }
             for (Entry<Integer, String> song : songMap.entrySet()) {
                 currSong = StringUtils.strip(song.getValue());
-                setList.add(currSong);
-                logger.info(currSong);
-                lastSong = currSong;
+                if (currSong.equalsIgnoreCase("holloween")) {
+                    currSong = "Halloween";
+                }
+                if (!(currSong.compareToIgnoreCase("Shake Me Like A Monkey") == 0 &&
+                        lastSong.compareToIgnoreCase("Shake Me Like A Monkey") == 0)) {
+                    setList.add(currSong);
+                    logger.info(currSong);
+                    lastSong = currSong;
+                }
             }
             int segueIndex = -1;
             int partialIndex = -1;
@@ -912,8 +846,11 @@ public class Setlist {
                 String partial = noteList.remove(partialIndex);
                 noteList.add(partial);
             }
+            return doc.body().toString();
         }
-        return doc.body().toString();
+        else {
+            return "NO SETLIST RETURNED!!";
+        }
     }
     
     public void runSetlistCheck(String url) {
@@ -1009,12 +946,19 @@ public class Setlist {
         }
         if (!noteMap.isEmpty()) {
         	sb.append("\n");
+            ArrayList<String> notes = new ArrayList<>(noteMap.values());
+            String topNote = notes.remove(0);
+            Collections.sort(notes);
+            notes.add(0, topNote);
         	for (Entry<Integer, String> note : noteMap.entrySet()) {
         		sb.append("\n");
             	sb.append(note.getValue());
         	}
         }
         else if (!noteList.isEmpty()) {
+            String topNote = noteList.remove(0);
+            Collections.sort(noteList);
+            noteList.add(0, topNote);
     		sb.append("\n");
         	for (String note : noteList) {
         		sb.append("\n");
@@ -1034,8 +978,9 @@ public class Setlist {
         logger.info("diff:");
         logger.info(diff);
         boolean hasChange = !StringUtils.isBlank(diff);
+        newSetlist |= hasChange;
         sb.setLength(0);
-        if (hasChange) {
+        if (hasChange && !setList.get(0).equalsIgnoreCase("test")) {
             fileUtil.writeStringToFile(setlistText, setlistFile);
             // -1 if failure or not a new setlist
             // 0 if a new setlist (latest)
@@ -1323,7 +1268,7 @@ public class Setlist {
             return -1;
         }
         else {
-            com.jeffthefate.utils.json.Setlist setlist = setlistResults
+            com.jeffthefate.utils.json.parse.Setlist setlist = setlistResults
                     .getResults().get(0);
         	String venueId = setlist.getVenue().getObjectId();
         	logger.info("VenueId: " + venueId);
@@ -1570,21 +1515,8 @@ public class Setlist {
                 }
             }
         }
-        saveScores();
+        gameUtil.saveScores(scoresFile, usersMap, gameConfig);
         return winners;
-    }
-
-    public boolean saveScores() {
-        if (!fileUtil.saveHashMapToFile(scoresFile, usersMap)) {
-            twitterUtil.sendDirectMessage(gameConfig, "Copperpot5",
-                    "Failed saving scores!");
-            return false;
-        }
-        return true;
-    }
-
-    public HashMap<Object, Object> readScores() {
-        return fileUtil.readHashMapFromFile(scoresFile);
     }
 
 }
